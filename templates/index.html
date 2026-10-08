@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Freshers' Carnival 2K26 — Pass Scanner & Admin Portal</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HTML5-QRCode Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+        <div class="header-brand">
+            <div class="brand-icon"><i class="fa-solid fa-masks-theater"></i></div>
+            <div class="brand-text">
+                <span class="brand-title">CARNIVAL 2K26</span>
+                <span class="brand-subtitle">Pass Verification & Access Control</span>
+            </div>
+        </div>
+        <div class="header-nav">
+            <div id="userInfoBadge" class="user-info-badge hidden">
+                <span id="userRoleBadge" class="role-pill">VOLUNTEER</span>
+                <span id="userNameDisplay" class="user-name">Gate 1</span>
+            </div>
+            <div class="nav-buttons">
+                <button id="navScannerBtn" class="nav-btn active hidden" onclick="switchView('scanner')">
+                    <i class="fa-solid fa-barcode"></i> <span>Scanner</span>
+                </button>
+                <button id="navAdminBtn" class="nav-btn hidden" onclick="switchView('admin')">
+                    <i class="fa-solid fa-chart-line"></i> <span>Admin Panel</span>
+                </button>
+                <button id="navLogoutBtn" class="nav-btn logout-btn hidden" onclick="logout()">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> <span>Logout</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="app-main">
+        <!-- ==================== VIEW 1: LOGIN ==================== -->
+        <section id="loginView" class="view-section active">
+            <div class="login-wrapper">
+                <div class="carnival-card login-card">
+                    <div class="login-header">
+                        <div class="carnival-logo-badge">
+                            <i class="fa-solid fa-id-card-clip"></i>
+                        </div>
+                        <h2>Event Access Portal</h2>
+                        <p>Dr. D. Y. Patil Varale Campus • Freshers' Carnival</p>
+                    </div>
+
+                    <!-- Role Selector Tabs -->
+                    <div class="login-tabs">
+                        <button type="button" class="tab-btn active" id="tabVolunteer" onclick="setLoginRole('volunteer')">
+                            <i class="fa-solid fa-user-check"></i> Volunteer Scanner
+                        </button>
+                        <button type="button" class="tab-btn" id="tabAdmin" onclick="setLoginRole('admin')">
+                            <i class="fa-solid fa-shield-halved"></i> Administrator
+                        </button>
+                    </div>
+
+                    <form id="loginForm" onsubmit="handleLogin(event)">
+                        <!-- Volunteer Fields -->
+                        <div id="volunteerFields">
+                            <div class="form-group">
+                                <label for="volunteerStation"><i class="fa-solid fa-door-open"></i> Gate / Volunteer Name</label>
+                                <input type="text" id="volunteerStation" class="form-input" placeholder="e.g. Gate 1, Gate 2, or your Name" value="Gate 1 Volunteer">
+                            </div>
+                            <div class="form-group">
+                                <label for="volunteerPasscode"><i class="fa-solid fa-key"></i> Volunteer Access Code</label>
+                                <input type="password" id="volunteerPasscode" class="form-input" placeholder="Enter pass code (default: pass)" value="pass">
+                            </div>
+                        </div>
+
+                        <!-- Admin Fields -->
+                        <div id="adminFields" class="hidden">
+                            <div class="form-group">
+                                <label for="adminUsername"><i class="fa-solid fa-user-tie"></i> Admin Username</label>
+                                <input type="text" id="adminUsername" class="form-input" placeholder="admin" value="admin">
+                            </div>
+                            <div class="form-group">
+                                <label for="adminPassword"><i class="fa-solid fa-lock"></i> Admin Password</label>
+                                <input type="password" id="adminPassword" class="form-input" placeholder="admin123" value="admin123">
+                            </div>
+                        </div>
+
+                        <div id="loginError" class="alert-banner error hidden"></div>
+
+                        <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-block">
+                            <i class="fa-solid fa-right-to-bracket"></i> Launch Scanner Portal
+                        </button>
+                    </form>
+
+                    <div class="login-footer">
+                        <span>Default logins: Volunteer (<code>pass</code>) • Admin (<code>admin123</code>)</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== VIEW 2: VOLUNTEER SCANNER ==================== -->
+        <section id="scannerView" class="view-section hidden">
+            <div class="scanner-layout">
+                <!-- Left: Scanner Viewport & Controls -->
+                <div class="scanner-main-panel">
+                    <div class="carnival-card scanner-card">
+                        <!-- Input Bar with auto-focus -->
+                        <div class="scan-input-section">
+                            <div class="scan-input-wrapper">
+                                <i class="fa-solid fa-barcode scan-icon"></i>
+                                <input type="text" id="barcodeInput" class="scan-input" placeholder="Scan Barcode with Gun OR Type ID (e.g. 26413, A11101)..." autofocus autocomplete="off">
+                                <button type="button" class="btn btn-primary btn-scan" onclick="processManualInput()">
+                                    <i class="fa-solid fa-arrow-turn-down"></i> Check
+                                </button>
+                            </div>
+                            <div class="scanner-mode-toggles">
+                                <button type="button" id="cameraToggleBtn" class="btn btn-ghost" onclick="toggleCameraScanner()">
+                                    <i class="fa-solid fa-camera"></i> <span id="cameraBtnText">Enable Camera Scanner</span>
+                                </button>
+                                <div class="audio-toggle">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="audioToggle" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span><i class="fa-solid fa-volume-high"></i> Sound Feedback</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Camera Box (Initially Hidden until toggle) -->
+                        <div id="cameraBox" class="camera-container hidden">
+                            <div id="reader" class="camera-reader"></div>
+                            <div class="camera-hint"><i class="fa-solid fa-circle-dot blink"></i> Align student pass barcode inside the target square</div>
+                        </div>
+
+                        <!-- Scan Result Announcement Hero Card -->
+                        <div id="scanResultHero" class="scan-hero idle">
+                            <div class="hero-icon-box">
+                                <i id="heroIcon" class="fa-solid fa-qrcode"></i>
+                            </div>
+                            <div class="hero-content">
+                                <h3 id="heroTitle">Ready to Scan</h3>
+                                <p id="heroSubtitle">Point laser scanner at the barcode or enter ID above</p>
+                            </div>
+                        </div>
+
+                        <!-- Detailed Student Verification Card -->
+                        <div id="studentDetailCard" class="student-card hidden">
+                            <div class="student-card-header">
+                                <div class="student-avatar"><i class="fa-solid fa-user-graduate"></i></div>
+                                <div class="student-main-meta">
+                                    <h2 id="cardStudentName">STUDENT NAME</h2>
+                                    <div class="badges-row">
+                                        <span id="cardCollegeBadge" class="badge badge-college">DYPCOEI</span>
+                                        <span id="cardDivisionBadge" class="badge badge-div">DIV: A</span>
+                                        <span id="cardBarcodeBadge" class="badge badge-mono">BARCODE: 11129</span>
+                                    </div>
+                                </div>
+                                <div id="cardStatusPill" class="status-pill status-granted">
+                                    <i class="fa-solid fa-circle-check"></i> GRANTED
+                                </div>
+                            </div>
+
+                            <div class="student-card-body">
+                                <div class="meta-grid">
+                                    <div class="meta-item">
+                                        <span class="meta-label">Entry Timestamp</span>
+                                        <span id="cardEntryTimestamp" class="meta-value">-</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Check-in Gate</span>
+                                        <span id="cardVolunteer" class="meta-value">-</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Entry Permission</span>
+                                        <span id="cardPermission" class="meta-value text-success">Permitted (Entry 1 of 1)</span>
+                                    </div>
+                                </div>
+
+                                <!-- Previous entry details box (shown on duplicate attempt) -->
+                                <div id="duplicateAlertBox" class="duplicate-warning-box hidden">
+                                    <div class="dup-header">
+                                        <i class="fa-solid fa-triangle-exclamation"></i>
+                                        <strong>SECURITY WARNING: SECOND ENTRY STRICTLY NOT ALLOWED</strong>
+                                    </div>
+                                    <div class="dup-details">
+                                        This pass was already validated at:
+                                        <div class="dup-time" id="dupFirstTime">Time: -</div>
+                                        <div class="dup-vol" id="dupFirstVol">Processed By: -</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Quick Live Log & Session Stats -->
+                <div class="scanner-side-panel">
+                    <!-- Session mini counters -->
+                    <div class="carnival-card mini-stats-card">
+                        <div class="mini-stat">
+                            <span class="mini-label">Session Scans</span>
+                            <span id="sessionScanCount" class="mini-value text-accent">0</span>
+                        </div>
+                        <div class="mini-stat">
+                            <span class="mini-label">Admitted</span>
+                            <span id="sessionAdmittedCount" class="mini-value text-success">0</span>
+                        </div>
+                        <div class="mini-stat">
+                            <span class="mini-label">Denied / Dupes</span>
+                            <span id="sessionDeniedCount" class="mini-value text-danger">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Recent Scans Live Feed -->
+                    <div class="carnival-card recent-scans-card">
+                        <div class="card-head">
+                            <h4><i class="fa-solid fa-clock-rotate-left"></i> Live Activity Feed</h4>
+                            <span class="badge badge-pill" id="liveFeedCount">0</span>
+                        </div>
+                        <div id="recentScansList" class="recent-list">
+                            <div class="empty-state">No scans recorded yet in this session</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== VIEW 3: ADMIN PANEL ==================== -->
+        <section id="adminView" class="view-section hidden">
+            <div class="admin-layout">
+                <!-- Top Summary Cards -->
+                <div class="admin-metrics-grid">
+                    <div class="carnival-card metric-card total-metric">
+                        <div class="metric-icon"><i class="fa-solid fa-users"></i></div>
+                        <div class="metric-info">
+                            <span class="metric-title">TOTAL REGISTERED</span>
+                            <h2 id="adminTotalRegistered" class="metric-num">733</h2>
+                            <span class="metric-sub">Across 3 Institutions</span>
+                        </div>
+                    </div>
+                    <div class="carnival-card metric-card entered-metric">
+                        <div class="metric-icon"><i class="fa-solid fa-user-check"></i></div>
+                        <div class="metric-info">
+                            <span class="metric-title">TOTAL ENTERED</span>
+                            <h2 id="adminTotalEntered" class="metric-num">0</h2>
+                            <div class="progress-bar-wrap">
+                                <div id="adminProgressBar" class="progress-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="carnival-card metric-card pending-metric">
+                        <div class="metric-icon"><i class="fa-solid fa-clock"></i></div>
+                        <div class="metric-info">
+                            <span class="metric-title">PENDING ARRIVAL</span>
+                            <h2 id="adminTotalPending" class="metric-num">733</h2>
+                            <span id="adminAttendanceRate" class="metric-sub text-accent">0% Attendance</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- College Breakdown Grid -->
+                <div class="colleges-grid">
+                    <!-- DYPIMED -->
+                    <div class="carnival-card college-card dypimed-theme">
+                        <div class="college-header">
+                            <div class="college-title-group">
+                                <h3>DYPIMED</h3>
+                                <p>Inst. of Management (MCA / MBA)</p>
+                            </div>
+                            <span class="badge badge-college">150 Seats</span>
+                        </div>
+                        <div class="college-numbers">
+                            <div class="c-num"><strong id="dypimedEntered">0</strong><span>Entered</span></div>
+                            <div class="c-num"><strong id="dypimedPending">150</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dypimedPct">0%</strong><span>Rate</span></div>
+                        </div>
+                    </div>
+
+                    <!-- DYPCOEI -->
+                    <div class="carnival-card college-card dypcoei-theme">
+                        <div class="college-header">
+                            <div class="college-title-group">
+                                <h3>DYPCOEI</h3>
+                                <p>College of Engg & Innovation (FE)</p>
+                            </div>
+                            <span class="badge badge-college">289 Seats</span>
+                        </div>
+                        <div class="college-numbers">
+                            <div class="c-num"><strong id="dypcoeiEntered">0</strong><span>Entered</span></div>
+                            <div class="c-num"><strong id="dypcoeiPending">289</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dypcoeiPct">0%</strong><span>Rate</span></div>
+                        </div>
+                    </div>
+
+                    <!-- DYPTC -->
+                    <div class="carnival-card college-card dyptc-theme">
+                        <div class="college-header">
+                            <div class="college-title-group">
+                                <h3>DYPTC</h3>
+                                <p>Technical Campus (FE Engg)</p>
+                            </div>
+                            <span class="badge badge-college">294 Seats</span>
+                        </div>
+                        <div class="college-numbers">
+                            <div class="c-num"><strong id="dyptcEntered">0</strong><span>Entered</span></div>
+                            <div class="c-num"><strong id="dyptcPending">294</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dyptcPct">0%</strong><span>Rate</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Action Toolbar -->
+                <div class="admin-toolbar carnival-card">
+                    <div class="toolbar-left">
+                        <div class="filter-group">
+                            <label><i class="fa-solid fa-building-columns"></i> College:</label>
+                            <select id="filterCollege" class="form-select" onchange="fetchStudentsTable()">
+                                <option value="ALL">All Institutions (733)</option>
+                                <option value="DYPIMED">DYPIMED (150)</option>
+                                <option value="DYPCOEI">DYPCOEI (289)</option>
+                                <option value="DYPTC">DYPTC (294)</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label><i class="fa-solid fa-filter"></i> Status:</label>
+                            <select id="filterStatus" class="form-select" onchange="fetchStudentsTable()">
+                                <option value="ALL">All Status</option>
+                                <option value="ENTERED">Entered Only</option>
+                                <option value="PENDING">Pending Only</option>
+                            </select>
+                        </div>
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            <input type="text" id="adminSearchInput" class="form-input search-input" placeholder="Search by name, roll no, or barcode..." oninput="debounceSearch()">
+                        </div>
+                    </div>
+                    <div class="toolbar-right">
+                        <a href="/api/export-csv" class="btn btn-secondary">
+                            <i class="fa-solid fa-file-csv"></i> Export CSV
+                        </a>
+                        <button type="button" class="btn btn-danger" onclick="openResetModal()">
+                            <i class="fa-solid fa-rotate-left"></i> Reset Entries
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Students Records Table -->
+                <div class="carnival-card table-card">
+                    <div class="table-head-bar">
+                        <h4><i class="fa-solid fa-table-list"></i> Student Verification Directory</h4>
+                        <span id="tableRecordCount" class="record-count">Showing records</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="carnival-table">
+                            <thead>
+                                <tr>
+                                    <th>Barcode</th>
+                                    <th>Candidate Name</th>
+                                    <th>College</th>
+                                    <th>Div / Roll</th>
+                                    <th>Status</th>
+                                    <th>Entry Timestamp</th>
+                                    <th>Processed By</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                                <tr>
+                                    <td colspan="8" class="text-center">Loading student records...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== RESET ENTRIES MODAL ==================== -->
+    <div id="resetModal" class="modal-overlay hidden">
+        <div class="carnival-card modal-card">
+            <div class="modal-header">
+                <div class="modal-icon text-danger"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <h3>Reset Entry Records</h3>
+                <button type="button" class="modal-close" onclick="closeResetModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-warning">
+                    This action will reset the selected attendance records back to <strong>PENDING</strong>, clearing entry timestamps and allowing students to be scanned again.
+                </p>
+                <div class="form-group">
+                    <label for="resetScopeSelect"><i class="fa-solid fa-building-columns"></i> Select Reset Scope:</label>
+                    <select id="resetScopeSelect" class="form-select">
+                        <option value="ALL">Reset ALL Colleges (Entire Database)</option>
+                        <option value="DYPIMED">Reset DYPIMED Entries Only (150 students)</option>
+                        <option value="DYPCOEI">Reset DYPCOEI Entries Only (289 students)</option>
+                        <option value="DYPTC">Reset DYPTC Entries Only (294 students)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="resetAdminPassword"><i class="fa-solid fa-key"></i> Confirm Administrator Password:</label>
+                    <input type="password" id="resetAdminPassword" class="form-input" placeholder="Enter admin password (admin123)">
+                </div>
+                <div id="resetModalAlert" class="alert-banner error hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeResetModal()">Cancel</button>
+                <button type="button" id="confirmResetBtn" class="btn btn-danger" onclick="executeResetEntries()">
+                    <i class="fa-solid fa-trash-arrow-up"></i> Confirm & Reset Entries
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

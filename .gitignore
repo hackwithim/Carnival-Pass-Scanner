@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large generated PDF assets (exceeds GitHub 100MB limit)
+# Note: Re-generate anytime using python generate_*_passes.py
+*.pdf
+passes/
+
+# Environments & IDEs
+.env
+.venv
+env/
+venv/
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+.DS_Store
