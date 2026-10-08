@@ -1,12 +1,17 @@
 import os
+import shutil
 import csv
 import io
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, Response, send_file
 from tinydb import TinyDB, Query
-from db_loader import init_database, DB_PATH
+from db_loader import init_database, DB_PATH, BASE_DIR
 
-app = Flask(__name__, template_folder='templates', static_folder='static')
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static')
+)
 app.secret_key = 'grand-freshers-carnival-2k26-secret-key'
 
 # Ensure database exists
@@ -15,6 +20,7 @@ if not os.path.exists(DB_PATH):
 
 def get_db():
     return TinyDB(DB_PATH)
+
 
 @app.route('/')
 def index():

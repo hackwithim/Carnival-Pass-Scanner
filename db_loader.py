@@ -1,8 +1,18 @@
 import os
+import shutil
 import csv
 from tinydb import TinyDB, Query
 
-DB_PATH = 'database.json'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if os.environ.get('VERCEL'):
+    DB_PATH = '/tmp/database.json'
+    bundled_db = os.path.join(BASE_DIR, 'database.json')
+    if not os.path.exists(DB_PATH) and os.path.exists(bundled_db):
+        shutil.copy2(bundled_db, DB_PATH)
+else:
+    DB_PATH = os.path.join(BASE_DIR, 'database.json')
+
 
 def init_database(force_reload=False):
     """
