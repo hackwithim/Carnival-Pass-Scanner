@@ -22,6 +22,19 @@ def get_db():
     return TinyDB(DB_PATH)
 
 
+def get_user_record(db, username):
+    users_table = db.table('users')
+    User = Query()
+    return users_table.get(User.username == username)
+
+
+def get_admin_password(db):
+    rec = get_user_record(db, 'admin')
+    if rec and rec.get('password'):
+        return rec['password']
+    return 'admin123'
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -38,15 +51,20 @@ def login():
     User = Query()
 
     # Admin login check
-    if username == 'admin' and password == 'admin123':
-        db.close()
-        return jsonify({
-            'success': True,
-            'role': 'admin',
-            'username': 'admin',
-            'name': 'Administrator',
-            'token': 'admin-session-token'
-        })
+    if username == 'admin':
+        admin_pass = get_admin_password(db)
+        if password == admin_pass:
+            db.close()
+            return jsonify({
+                'success': True,
+                'role': 'admin',
+                'username': 'admin',
+                'name': 'Administrator',
+                'token': 'admin-session-token'
+            })
+        else:
+            db.close()
+            return jsonify({'success': False, 'message': 'Invalid administrator password'}), 401
 
     # Volunteer accounts
     user = users_table.get((User.username == username) & (User.password == password))
@@ -339,10 +357,13 @@ def reset_entries():
     target_college = data.get('college', 'ALL').strip().upper()
     admin_password = data.get('admin_password', '').strip()
 
-    if admin_password != 'admin123':
+    db = get_db()
+    current_admin_password = get_admin_password(db)
+
+    if admin_password != current_admin_password:
+        db.close()
         return jsonify({'success': False, 'message': 'Unauthorized: Incorrect Admin Password!'}), 403
 
-    db = get_db()
     students_table = db.table('students')
     logs_table = db.table('logs')
     Student = Query()
@@ -380,6 +401,82 @@ def reset_entries():
 
     db.close()
     return jsonify({'success': True, 'message': msg})
+
+@app.route('/api/admin/change-password', methods=['POST'])
+def change_password():
+    data = request.json or {}
+    current_password = data.get('current_password', '').strip()
+    new_password = data.get('new_password', '').strip()
+    confirm_password = data.get('confirm_password', '').strip()
+    target_user = data.get('target_user', 'admin').strip().lower()
+
+    if not current_password:
+        return jsonify({'success': False, 'message': 'Please provide the current Administrator password.'}), 400
+
+    if not new_password:
+        return jsonify({'success': False, 'message': 'Please enter a new password.'}), 400
+
+    if len(new_password) < 4:
+        return jsonify({'success': False, 'message': 'New password must be at least 4 characters long.'}), 400
+
+    if new_password != confirm_password:
+        return jsonify({'success': False, 'message': 'New password and confirmation do not match.'}), 400
+
+    db = get_db()
+    actual_admin_password = get_admin_password(db)
+
+    if current_password != actual_admin_password:
+        db.close()
+        return jsonify({'success': False, 'message': 'Authentication failed: Incorrect current Administrator password!'}), 403
+
+    users_table = db.table('users')
+    User = Query()
+
+    existing = users_table.get(User.username == target_user)
+    if existing:
+        users_table.update({'password': new_password}, User.username == target_user)
+    else:
+        role = 'admin' if target_user == 'admin' else 'volunteer'
+        name = 'Super Admin' if target_user == 'admin' else target_user.title()
+        users_table.insert({
+            'username': target_user,
+            'password': new_password,
+            'name': name,
+            'role': role
+        })
+
+    db.close()
+    target_label = "Administrator" if target_user == 'admin' else f"Volunteer '{target_user}'"
+    return jsonify({
+        'success': True,
+        'message': f"Password for {target_label} has been successfully updated!"
+    })
+
+@app.route('/api/admin/users', methods=['GET'])
+def get_admin_users():
+    db = get_db()
+    users_table = db.table('users')
+    users = []
+    for u in users_table.all():
+        users.append({
+            'username': u.get('username'),
+            'name': u.get('name'),
+            'role': u.get('role')
+        })
+    db.close()
+
+    usernames = [u['username'] for u in users]
+    defaults = [
+        {'username': 'admin', 'name': 'Administrator', 'role': 'admin'},
+        {'username': 'gate1', 'name': 'Gate 1 Volunteer', 'role': 'volunteer'},
+        {'username': 'gate2', 'name': 'Gate 2 Volunteer', 'role': 'volunteer'},
+        {'username': 'volunteer', 'name': 'Main Volunteer', 'role': 'volunteer'}
+    ]
+    for d in defaults:
+        if d['username'] not in usernames:
+            users.append(d)
+
+    return jsonify({'success': True, 'users': users})
 
 @app.route('/api/export-csv')
 def export_csv():

@@ -344,6 +344,9 @@
                         </div>
                     </div>
                     <div class="toolbar-right">
+                        <button type="button" class="btn btn-secondary" onclick="openPasswordModal()">
+                            <i class="fa-solid fa-key"></i> Change Password
+                        </button>
                         <a href="/api/export-csv" class="btn btn-secondary">
                             <i class="fa-solid fa-file-csv"></i> Export CSV
                         </a>
@@ -384,6 +387,65 @@
             </div>
         </section>
     </main>
+
+    <!-- ==================== CHANGE PASSWORD MODAL ==================== -->
+    <div id="passwordModal" class="modal-overlay hidden">
+        <div class="carnival-card modal-card password-modal-card">
+            <div class="modal-header">
+                <div class="modal-icon text-accent"><i class="fa-solid fa-shield-halved"></i></div>
+                <h3>Change Account Password</h3>
+                <button type="button" class="modal-close" onclick="closePasswordModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-intro">
+                    Update credentials for the Administrator or Volunteer gate access accounts.
+                </p>
+                <div class="form-group">
+                    <label for="pwdTargetUser"><i class="fa-solid fa-user-shield"></i> Target Account:</label>
+                    <select id="pwdTargetUser" class="form-select">
+                        <option value="admin">Administrator (admin)</option>
+                        <option value="gate1">Gate 1 Volunteer (gate1)</option>
+                        <option value="gate2">Gate 2 Volunteer (gate2)</option>
+                        <option value="volunteer">Main Volunteer (volunteer)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pwdCurrentAdmin"><i class="fa-solid fa-lock"></i> Current Administrator Password:</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="pwdCurrentAdmin" class="form-input" placeholder="Enter current admin password">
+                        <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('pwdCurrentAdmin', 'eyeCurrentAdmin')">
+                            <i id="eyeCurrentAdmin" class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="pwdNewPassword"><i class="fa-solid fa-key"></i> New Password:</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="pwdNewPassword" class="form-input" placeholder="Minimum 4 characters">
+                        <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('pwdNewPassword', 'eyeNewPassword')">
+                            <i id="eyeNewPassword" class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="pwdConfirmPassword"><i class="fa-solid fa-check-double"></i> Confirm New Password:</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="pwdConfirmPassword" class="form-input" placeholder="Re-type new password">
+                        <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('pwdConfirmPassword', 'eyeConfirmPassword')">
+                            <i id="eyeConfirmPassword" class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="passwordModalAlert" class="alert-banner error hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closePasswordModal()">Cancel</button>
+                <button type="button" id="submitPasswordChangeBtn" class="btn btn-primary" onclick="executeChangePassword()">
+                    <i class="fa-solid fa-floppy-disk"></i> Update Password
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- ==================== RESET ENTRIES MODAL ==================== -->
     <div id="resetModal" class="modal-overlay hidden">

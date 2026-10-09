@@ -1175,6 +1175,49 @@ input:checked + .slider:before {
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.password-modal-card {
+    border-color: rgba(236, 72, 153, 0.45);
+    box-shadow: 0 20px 50px rgba(236, 72, 153, 0.12);
+}
+
+.password-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.password-input-wrap .form-input {
+    padding-right: 2.8rem;
+    width: 100%;
+}
+
+.pwd-toggle-btn {
+    position: absolute;
+    right: 0.85rem;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.pwd-toggle-btn:hover {
+    color: var(--text-primary);
+}
+
+.modal-intro {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 1.2rem;
+}
+
 .modal-header {
     display: flex;
     align-items: center;

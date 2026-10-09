@@ -624,6 +624,114 @@ async function undoCheckin(barcode) {
     }
 }
 
+// ==================== CHANGE PASSWORD MODAL ====================
+function openPasswordModal() {
+    const modal = document.getElementById('passwordModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.getElementById('pwdTargetUser').value = 'admin';
+    document.getElementById('pwdCurrentAdmin').value = '';
+    document.getElementById('pwdNewPassword').value = '';
+    document.getElementById('pwdConfirmPassword').value = '';
+    document.getElementById('passwordModalAlert').classList.add('hidden');
+
+    ['pwdCurrentAdmin', 'pwdNewPassword', 'pwdConfirmPassword'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.type = 'password';
+    });
+    ['eyeCurrentAdmin', 'eyeNewPassword', 'eyeConfirmPassword'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = 'fa-solid fa-eye';
+    });
+}
+
+function closePasswordModal() {
+    const modal = document.getElementById('passwordModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function togglePasswordVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (!input || !icon) return;
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fa-solid fa-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'fa-solid fa-eye';
+    }
+}
+
+async function executeChangePassword() {
+    const targetUser = document.getElementById('pwdTargetUser').value;
+    const currentPassword = document.getElementById('pwdCurrentAdmin').value.trim();
+    const newPassword = document.getElementById('pwdNewPassword').value.trim();
+    const confirmPassword = document.getElementById('pwdConfirmPassword').value.trim();
+    const alertBox = document.getElementById('passwordModalAlert');
+    const submitBtn = document.getElementById('submitPasswordChangeBtn');
+
+    alertBox.classList.add('hidden');
+
+    if (!currentPassword) {
+        alertBox.textContent = 'Please enter current Administrator password.';
+        alertBox.classList.remove('hidden');
+        return;
+    }
+
+    if (!newPassword) {
+        alertBox.textContent = 'Please enter a new password.';
+        alertBox.classList.remove('hidden');
+        return;
+    }
+
+    if (newPassword.length < 4) {
+        alertBox.textContent = 'New password must be at least 4 characters long.';
+        alertBox.classList.remove('hidden');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        alertBox.textContent = 'New password and confirmation do not match.';
+        alertBox.classList.remove('hidden');
+        return;
+    }
+
+    const originalBtnHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+
+    try {
+        const res = await fetch('/api/admin/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_user: targetUser,
+                current_password: currentPassword,
+                new_password: newPassword,
+                confirm_password: confirmPassword
+            })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            closePasswordModal();
+            showToast(data.message, 'success');
+        } else {
+            alertBox.textContent = data.message || 'Failed to update password.';
+            alertBox.classList.remove('hidden');
+        }
+    } catch (err) {
+        alertBox.textContent = 'Network or server error while updating password.';
+        alertBox.classList.remove('hidden');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHtml;
+    }
+}
+
 // ==================== RESET ENTRIES MODAL ====================
 function openResetModal() {
     document.getElementById('resetModal').classList.remove('hidden');
