@@ -57,8 +57,9 @@ def init_database(force_reload=False):
     new_students = []
 
     # 1. Load DYPIMED & DYPCOEI from data.csv
-    if os.path.exists('data.csv'):
-        with open('data.csv', mode='r', encoding='utf-8-sig', errors='replace') as f:
+    data_csv = os.path.join(BASE_DIR, 'data.csv')
+    if os.path.exists(data_csv):
+        with open(data_csv, mode='r', encoding='utf-8-sig', errors='replace') as f:
             rows = list(csv.reader(f))
 
         current_college = None
@@ -95,8 +96,9 @@ def init_database(force_reload=False):
                 })
 
     # 2. Load DYPTC from DYPTC.csv
-    if os.path.exists('DYPTC.csv'):
-        with open('DYPTC.csv', mode='r', encoding='utf-8-sig', errors='replace') as f:
+    dyptc_csv = os.path.join(BASE_DIR, 'DYPTC.csv')
+    if os.path.exists(dyptc_csv):
+        with open(dyptc_csv, mode='r', encoding='utf-8-sig', errors='replace') as f:
             rows = list(csv.reader(f))
 
         for idx, row in enumerate(rows):

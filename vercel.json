@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/*.py": {
+      "includeFiles": "{templates/**,static/**,database.json,data.csv,DYPTC.csv}"
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
