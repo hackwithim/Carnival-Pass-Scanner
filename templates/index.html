@@ -89,11 +89,16 @@
                         <div id="adminFields" class="hidden">
                             <div class="form-group">
                                 <label for="adminUsername"><i class="fa-solid fa-user-tie"></i> Admin Username</label>
-                                <input type="text" id="adminUsername" class="form-input" placeholder="admin" value="admin">
+                                <input type="text" id="adminUsername" class="form-input" placeholder="Enter admin username" autocomplete="username">
                             </div>
                             <div class="form-group">
                                 <label for="adminPassword"><i class="fa-solid fa-lock"></i> Admin Password</label>
-                                <input type="password" id="adminPassword" class="form-input" placeholder="admin123" value="admin123">
+                                <div class="password-input-wrap">
+                                    <input type="password" id="adminPassword" class="form-input" placeholder="Enter admin password" autocomplete="current-password">
+                                    <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('adminPassword', 'eyeAdminPass')">
+                                        <i id="eyeAdminPass" class="fa-solid fa-eye"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -105,7 +110,7 @@
                     </form>
 
                     <div class="login-footer">
-                        <span>System Access: Administrator (<code>admin</code> / <code>admin123</code>) • Volunteer staff accounts created via Admin Portal</span>
+                        <span>Grand Freshers' Carnival 2K26 • Secure Checkpoint Scanner & Administration</span>
                     </div>
                 </div>
             </div>
@@ -522,24 +527,21 @@
                 </p>
                 <div class="form-group">
                     <label for="pwdTargetUser"><i class="fa-solid fa-user-shield"></i> Target Account:</label>
-                    <select id="pwdTargetUser" class="form-select">
+                    <select id="pwdTargetUser" class="form-select" onchange="handlePasswordTargetUserChange()">
                         <option value="admin">Administrator (admin)</option>
-                        <option value="gate1">Gate 1 Volunteer (gate1)</option>
-                        <option value="gate2">Gate 2 Volunteer (gate2)</option>
-                        <option value="volunteer">Main Volunteer (volunteer)</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="currentAdminPasswordGroup">
                     <label for="pwdCurrentAdmin"><i class="fa-solid fa-lock"></i> Current Administrator Password:</label>
                     <div class="password-input-wrap">
-                        <input type="password" id="pwdCurrentAdmin" class="form-input" placeholder="Enter current admin password">
+                        <input type="password" id="pwdCurrentAdmin" class="form-input" placeholder="Enter current admin password" autocomplete="current-password">
                         <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('pwdCurrentAdmin', 'eyeCurrentAdmin')">
                             <i id="eyeCurrentAdmin" class="fa-solid fa-eye"></i>
                         </button>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="pwdNewPassword"><i class="fa-solid fa-key"></i> New Password:</label>
+                    <label for="pwdNewPassword" id="pwdNewPasswordLabel"><i class="fa-solid fa-key"></i> New Password:</label>
                     <div class="password-input-wrap">
                         <input type="password" id="pwdNewPassword" class="form-input" placeholder="Minimum 4 characters">
                         <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('pwdNewPassword', 'eyeNewPassword')">
@@ -592,7 +594,7 @@
                 </div>
                 <div class="form-group">
                     <label for="resetAdminPassword"><i class="fa-solid fa-key"></i> Confirm Administrator Password:</label>
-                    <input type="password" id="resetAdminPassword" class="form-input" placeholder="Enter admin password (admin123)">
+                    <input type="password" id="resetAdminPassword" class="form-input" placeholder="Enter current admin password">
                 </div>
                 <div id="resetModalAlert" class="alert-banner error hidden"></div>
             </div>

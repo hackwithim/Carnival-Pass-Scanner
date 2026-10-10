@@ -280,6 +280,9 @@ function switchView(viewName) {
             const inp = document.getElementById('barcodeInput');
             if (inp) inp.focus();
         }, 150);
+
+        // Load initial activity feed if empty
+        loadInitialScannerFeed();
     } else if (viewName === 'admin') {
         document.getElementById('adminView').classList.remove('hidden');
         document.getElementById('navAdminBtn')?.classList.add('active');
@@ -704,6 +707,13 @@ async function fetchStudentsTable() {
             const collegeBadgeClass = isBoxOffice ? 'badge badge-boxoffice' : 'badge badge-college';
             const divRollText = isBoxOffice ? `SERIAL #${s.roll_no || s.barcode}` : `${s.division || '-'} / ${s.roll_no || '-'}`;
 
+            const entryTimeDisplay = isEntered
+                ? (s.entry_date && s.entry_time ? `${s.entry_date} ${s.entry_time}` : (s.entry_timestamp || 'Checked In'))
+                : '<span class="text-muted">—</span>';
+            const processedByDisplay = isEntered
+                ? (s.volunteer || 'Gate Staff')
+                : '<span class="text-muted">—</span>';
+
             return `
                 <tr>
                     <td><code>${s.barcode}</code></td>
@@ -711,8 +721,8 @@ async function fetchStudentsTable() {
                     <td><span class="${collegeBadgeClass}">${s.college}</span></td>
                     <td>${divRollText}</td>
                     <td>${statusBadge}</td>
-                    <td>${isEntered ? `${s.entry_date} ${s.entry_time}` : '-'}</td>
-                    <td>${s.volunteer || '-'}</td>
+                    <td>${entryTimeDisplay}</td>
+                    <td>${processedByDisplay}</td>
                     <td>${actionBtn}</td>
                 </tr>
             `;
@@ -961,59 +971,61 @@ async function deleteVolunteer(username) {
     }
 }
 
-async function quickUpdateVolunteerPassword(username) {
-    const newPass = prompt(`Set new password for volunteer '@${username}' (minimum 4 characters):`);
-    if (newPass === null) return;
-    const cleanPass = newPass.trim();
-    if (!cleanPass || cleanPass.length < 4) {
-        showToast('Password must be at least 4 characters long', 'error');
-        return;
-    }
+function quickUpdateVolunteerPassword(username) {
+    openPasswordModal(username);
+}
 
-    try {
-        const res = await fetch('/api/admin/volunteers/update-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, new_password: cleanPass })
-        });
-        const data = await res.json();
+function handlePasswordTargetUserChange() {
+    const select = document.getElementById('pwdTargetUser');
+    const targetUser = select ? select.value : 'admin';
+    const currentGroup = document.getElementById('currentAdminPasswordGroup');
+    const newLabel = document.getElementById('pwdNewPasswordLabel');
+    const modalTitle = document.getElementById('passwordModalTitle');
 
-        if (data.success) {
-            showToast(data.message, 'success');
-            fetchVolunteersList();
-        } else {
-            showToast(data.message || 'Failed to update password', 'error');
-        }
-    } catch (err) {
-        showToast('Error updating password', 'error');
+    if (targetUser === 'admin') {
+        if (currentGroup) currentGroup.classList.remove('hidden');
+        if (newLabel) newLabel.innerHTML = '<i class="fa-solid fa-key"></i> New Administrator Password:';
+        if (modalTitle) modalTitle.textContent = 'Change Administrator Password';
+    } else {
+        if (currentGroup) currentGroup.classList.add('hidden');
+        if (newLabel) newLabel.innerHTML = `<i class="fa-solid fa-key"></i> New Password for '@${targetUser}':`;
+        if (modalTitle) modalTitle.textContent = `Set Password for Volunteer (@${targetUser})`;
     }
 }
 
-async function populatePasswordTargetUsers() {
+async function populatePasswordTargetUsers(selectedUser = 'admin') {
+    const select = document.getElementById('pwdTargetUser');
+    if (!select) return;
+
     try {
         const res = await fetch('/api/admin/volunteers');
         const data = await res.json();
-        if (data.success && data.volunteers) {
-            const select = document.getElementById('pwdTargetUser');
-            if (select) {
-                const prev = select.value || 'admin';
-                select.innerHTML = data.volunteers.map(v => 
-                    `<option value="${v.username}">${v.name || v.username} (${v.username})</option>`
-                ).join('');
-                if (data.volunteers.some(v => v.username === prev)) {
-                    select.value = prev;
-                }
+        const volunteers = (data.success && data.volunteers) ? data.volunteers : [];
+
+        let optionsHtml = '<option value="admin">Administrator (admin)</option>';
+        volunteers.forEach(v => {
+            if (v.username !== 'admin') {
+                optionsHtml += `<option value="${v.username}">${v.name || v.username} (@${v.username})</option>`;
             }
-        }
-    } catch (e) {}
+        });
+
+        select.innerHTML = optionsHtml;
+        select.value = selectedUser || 'admin';
+        handlePasswordTargetUserChange();
+    } catch (e) {
+        select.innerHTML = '<option value="admin">Administrator (admin)</option>';
+        handlePasswordTargetUserChange();
+    }
 }
 
 // ==================== CHANGE PASSWORD MODAL ====================
-function openPasswordModal() {
+function openPasswordModal(targetUser = 'admin') {
     const modal = document.getElementById('passwordModal');
     if (!modal) return;
     modal.classList.remove('hidden');
-    populatePasswordTargetUsers();
+
+    populatePasswordTargetUsers(targetUser);
+
     document.getElementById('pwdCurrentAdmin').value = '';
     document.getElementById('pwdNewPassword').value = '';
     document.getElementById('pwdConfirmPassword').value = '';
@@ -1027,6 +1039,13 @@ function openPasswordModal() {
         const el = document.getElementById(id);
         if (el) el.className = 'fa-solid fa-eye';
     });
+
+    setTimeout(() => {
+        const targetInput = targetUser === 'admin' 
+            ? document.getElementById('pwdCurrentAdmin') 
+            : document.getElementById('pwdNewPassword');
+        if (targetInput) targetInput.focus();
+    }, 150);
 }
 
 function closePasswordModal() {
@@ -1058,8 +1077,8 @@ async function executeChangePassword() {
 
     alertBox.classList.add('hidden');
 
-    if (!currentPassword) {
-        alertBox.textContent = 'Please enter current Administrator password.';
+    if (targetUser === 'admin' && !currentPassword) {
+        alertBox.textContent = 'Please enter your current Administrator password.';
         alertBox.classList.remove('hidden');
         return;
     }
@@ -1103,6 +1122,7 @@ async function executeChangePassword() {
         if (data.success) {
             closePasswordModal();
             showToast(data.message, 'success');
+            fetchVolunteersList();
         } else {
             alertBox.textContent = data.message || 'Failed to update password.';
             alertBox.classList.remove('hidden');
@@ -1114,6 +1134,39 @@ async function executeChangePassword() {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalBtnHtml;
     }
+}
+
+async function loadInitialScannerFeed() {
+    const list = document.getElementById('recentScansList');
+    if (!list) return;
+
+    // Only load if empty
+    if (list.querySelector('.recent-item')) return;
+
+    try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        if (data.recent_logs && data.recent_logs.length > 0) {
+            list.innerHTML = '';
+            data.recent_logs.slice(0, 15).forEach(l => {
+                const item = document.createElement('div');
+                const statusClass = l.status === 'GRANTED' ? 'granted' : (l.status === 'DUPLICATE_DENIED' ? 'duplicate' : 'notfound');
+                item.className = `recent-item ${statusClass}`;
+                item.innerHTML = `
+                    <div class="recent-main">
+                        <strong>${l.student_name || 'Pass Attendee'}</strong>
+                        <span>${l.college || 'Pass'} • ${l.barcode}</span>
+                    </div>
+                    <div class="recent-time">
+                        ${l.status === 'GRANTED' ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-solid fa-xmark text-danger"></i>'} ${l.time || ''}
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+            const badge = document.getElementById('liveFeedCount');
+            if (badge) badge.textContent = `${list.children.length}`;
+        }
+    } catch (e) {}
 }
 
 // ==================== RESET ENTRIES MODAL ====================

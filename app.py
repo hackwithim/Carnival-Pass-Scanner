@@ -376,8 +376,19 @@ def get_students():
                 continue
         results.append(s)
 
-    # Sort: Entered first, then by college, then by name
-    results.sort(key=lambda x: (0 if x.get('status') == 'ENTERED' else 1, x.get('college', ''), x.get('name', '')))
+    # Sort: Entered first (newest check-in first), then by college, then by name
+    def sort_students(s):
+        is_entered = 0 if s.get('status') == 'ENTERED' else 1
+        ts = s.get('entry_timestamp') or ''
+        if is_entered == 0 and ts:
+            try:
+                epoch = datetime.fromisoformat(ts).timestamp()
+            except Exception:
+                epoch = 0
+            return (0, -epoch, s.get('college', ''), s.get('name', ''))
+        return (1, 0, s.get('college', ''), s.get('name', ''))
+
+    results.sort(key=sort_students)
     return jsonify({'count': len(results), 'students': results[:200]})
 
 @app.route('/api/manual-checkin', methods=['POST'])
@@ -501,6 +512,64 @@ def reset_entries():
     db.close()
     return jsonify({'success': True, 'message': msg})
 
+@app.route('/api/export-csv', methods=['GET'])
+def export_csv():
+    db = get_db()
+    students_table = db.table('students')
+    all_students = students_table.all()
+    db.close()
+
+    def sort_entry(s):
+        is_entered = 0 if s.get('status') == 'ENTERED' else 1
+        ts = s.get('entry_timestamp') or ''
+        if is_entered == 0 and ts:
+            try:
+                epoch = datetime.fromisoformat(ts).timestamp()
+            except Exception:
+                epoch = 0
+            return (0, -epoch, s.get('college', ''), s.get('name', ''))
+        return (1, 0, s.get('college', ''), s.get('name', ''))
+
+    sorted_students = sorted(all_students, key=sort_entry)
+
+    output = io.StringIO()
+    output.write('\ufeff')  # UTF-8 BOM for Excel
+    writer = csv.writer(output)
+    writer.writerow([
+        'Barcode',
+        'Attendee Name',
+        'Category / College',
+        'Division',
+        'Roll No / Serial',
+        'Entry Status',
+        'Entry Date',
+        'Entry Time',
+        'Entry Timestamp (ISO)',
+        'Processed By (Volunteer / Gate)'
+    ])
+
+    for s in sorted_students:
+        writer.writerow([
+            s.get('barcode', ''),
+            s.get('name', ''),
+            s.get('college', ''),
+            s.get('division', ''),
+            s.get('roll_no', ''),
+            s.get('status', 'PENDING'),
+            s.get('entry_date') or '',
+            s.get('entry_time') or '',
+            s.get('entry_timestamp') or '',
+            s.get('volunteer') or ''
+        ])
+
+    csv_data = output.getvalue()
+    filename = f"Carnival_2K26_Attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 @app.route('/api/admin/change-password', methods=['POST'])
 def change_password():
     data = request.json or {}
@@ -508,9 +577,6 @@ def change_password():
     new_password = data.get('new_password', '').strip()
     confirm_password = data.get('confirm_password', '').strip()
     target_user = data.get('target_user', 'admin').strip().lower()
-
-    if not current_password:
-        return jsonify({'success': False, 'message': 'Please provide the current Administrator password.'}), 400
 
     if not new_password:
         return jsonify({'success': False, 'message': 'Please enter a new password.'}), 400
@@ -524,16 +590,21 @@ def change_password():
     db = get_db()
     actual_admin_password = get_admin_password(db)
 
-    if current_password != actual_admin_password:
-        db.close()
-        return jsonify({'success': False, 'message': 'Authentication failed: Incorrect current Administrator password!'}), 403
+    # When updating the administrator account itself, verify current admin password
+    if target_user == 'admin':
+        if not current_password:
+            db.close()
+            return jsonify({'success': False, 'message': 'Please enter current Administrator password.'}), 400
+        if current_password != actual_admin_password:
+            db.close()
+            return jsonify({'success': False, 'message': 'Authentication failed: Incorrect current Administrator password!'}), 403
 
     users_table = db.table('users')
     User = Query()
 
     existing = users_table.get(User.username == target_user)
     if existing:
-        users_table.update({'password': new_password}, User.username == target_user)
+        users_table.update({'password': new_password}, doc_ids=[existing.doc_id])
     else:
         role = 'admin' if target_user == 'admin' else 'volunteer'
         name = 'Super Admin' if target_user == 'admin' else target_user.title()
@@ -691,37 +762,6 @@ def update_admin_volunteer_password():
         'success': True,
         'message': f"Password for '{username}' updated successfully!"
     })
-
-@app.route('/api/export-csv')
-def export_csv():
-    db = get_db()
-    students_table = db.table('students')
-    students = students_table.all()
-    db.close()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Barcode', 'Candidate Name', 'College', 'Division', 'Roll No', 'Entry Status', 'Entry Date', 'Entry Time', 'Processed By'])
-
-    for s in students:
-        writer.writerow([
-            s.get('barcode', ''),
-            s.get('name', ''),
-            s.get('college', ''),
-            s.get('division', ''),
-            s.get('roll_no', ''),
-            s.get('status', 'PENDING'),
-            s.get('entry_date', '') or '-',
-            s.get('entry_time', '') or '-',
-            s.get('volunteer', '') or '-'
-        ])
-
-    output.seek(0)
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-disposition": "attachment; filename=Grand_Freshers_Carnival_Attendance.csv"}
-    )
 
 if __name__ == '__main__':
     # Initialize database on start
