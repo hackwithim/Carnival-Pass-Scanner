@@ -478,6 +478,16 @@ def reset_entries():
     logs_table = db.table('logs')
     Student = Query()
 
+    # Automatically create snapshot backup before resetting to allow recovery
+    try:
+        backup_dir = os.path.join(BASE_DIR, 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        shutil.copy2(DB_PATH, os.path.join(backup_dir, f'backup_pre_reset_{backup_ts}.json'))
+        shutil.copy2(DB_PATH, os.path.join(backup_dir, 'latest_reset_backup.json'))
+    except Exception as e:
+        app.logger.warning(f"Failed to create pre-reset auto-backup: {e}")
+
     if target_college == 'ALL':
         students_table.update({
             'status': 'PENDING',
