@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/*.py": {
-      "includeFiles": "{templates/**,static/**,database.json,data.csv,DYPTC.csv}"
+      "includeFiles": "{templates/**,static/**,database.json,data.csv,DYPTC.csv,DAY2.csv}"
     }
   },
   "rewrites": [
