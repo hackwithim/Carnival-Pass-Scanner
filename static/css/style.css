@@ -693,6 +693,14 @@ input:checked + .slider:before {
     color: white;
 }
 
+.badge-boxoffice {
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+    color: #FFFFFF !important;
+    font-weight: 700;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.45);
+    border: 1px solid rgba(253, 230, 138, 0.5) !important;
+}
+
 .badge-div {
     background: rgba(59, 130, 246, 0.2);
     color: #93C5FD;

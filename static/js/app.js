@@ -341,7 +341,7 @@ function startScanCooldown(durationMs = 4000) {
             if (input) {
                 input.disabled = false;
                 input.value = '';
-                input.placeholder = 'Scan Barcode with Gun OR Type ID (e.g. 26413, A11101)...';
+                input.placeholder = 'Scan Barcode with Gun OR Type ID (e.g. CARNIVAL0001, 26413, 0001)...';
                 input.focus();
             }
             if (checkBtn) {
@@ -442,9 +442,18 @@ function handleScanResult(res, rawBarcode) {
         detailCard.classList.remove('hidden');
         dupBox.classList.add('hidden');
 
+        const isBoxOffice = res.student.college === 'BOX OFFICE';
+        const avatarEl = document.querySelector('.student-avatar');
+        if (avatarEl) {
+            avatarEl.innerHTML = isBoxOffice ? '<i class="fa-solid fa-ticket"></i>' : '<i class="fa-solid fa-user-graduate"></i>';
+        }
+
         document.getElementById('cardStudentName').textContent = res.student.name;
-        document.getElementById('cardCollegeBadge').textContent = res.student.college;
-        document.getElementById('cardDivisionBadge').textContent = `DIV: ${res.student.division || '-'}`;
+        const colBadge = document.getElementById('cardCollegeBadge');
+        colBadge.textContent = res.student.college;
+        colBadge.className = isBoxOffice ? 'badge badge-boxoffice' : 'badge badge-college';
+
+        document.getElementById('cardDivisionBadge').textContent = isBoxOffice ? `SERIAL: #${res.student.roll_no || res.student.barcode}` : `DIV: ${res.student.division || '-'}`;
         document.getElementById('cardBarcodeBadge').textContent = `BARCODE: ${res.student.barcode}`;
 
         const statusPill = document.getElementById('cardStatusPill');
@@ -473,9 +482,18 @@ function handleScanResult(res, rawBarcode) {
         detailCard.classList.remove('hidden');
         dupBox.classList.remove('hidden');
 
+        const isBoxOffice = res.student.college === 'BOX OFFICE';
+        const avatarEl = document.querySelector('.student-avatar');
+        if (avatarEl) {
+            avatarEl.innerHTML = isBoxOffice ? '<i class="fa-solid fa-ticket"></i>' : '<i class="fa-solid fa-user-graduate"></i>';
+        }
+
         document.getElementById('cardStudentName').textContent = res.student.name;
-        document.getElementById('cardCollegeBadge').textContent = res.student.college;
-        document.getElementById('cardDivisionBadge').textContent = `DIV: ${res.student.division || '-'}`;
+        const colBadge = document.getElementById('cardCollegeBadge');
+        colBadge.textContent = res.student.college;
+        colBadge.className = isBoxOffice ? 'badge badge-boxoffice' : 'badge badge-college';
+
+        document.getElementById('cardDivisionBadge').textContent = isBoxOffice ? `SERIAL: #${res.student.roll_no || res.student.barcode}` : `DIV: ${res.student.division || '-'}`;
         document.getElementById('cardBarcodeBadge').textContent = `BARCODE: ${res.student.barcode}`;
 
         const statusPill = document.getElementById('cardStatusPill');
@@ -682,12 +700,16 @@ async function fetchStudentsTable() {
                 ? `<button class="btn btn-ghost btn-xs text-danger" onclick="undoCheckin('${s.barcode}')" title="Reset this student to Pending"><i class="fa-solid fa-rotate-left"></i> Undo</button>`
                 : `<button class="btn btn-primary btn-xs" onclick="manualCheckin('${s.barcode}')" title="Manually check-in"><i class="fa-solid fa-user-check"></i> Check-in</button>`;
 
+            const isBoxOffice = s.college === 'BOX OFFICE';
+            const collegeBadgeClass = isBoxOffice ? 'badge badge-boxoffice' : 'badge badge-college';
+            const divRollText = isBoxOffice ? `SERIAL #${s.roll_no || s.barcode}` : `${s.division || '-'} / ${s.roll_no || '-'}`;
+
             return `
                 <tr>
                     <td><code>${s.barcode}</code></td>
                     <td><strong>${s.name}</strong></td>
-                    <td><span class="badge badge-college">${s.college}</span></td>
-                    <td>${s.division || '-'} / ${s.roll_no || '-'}</td>
+                    <td><span class="${collegeBadgeClass}">${s.college}</span></td>
+                    <td>${divRollText}</td>
                     <td>${statusBadge}</td>
                     <td>${isEntered ? `${s.entry_date} ${s.entry_time}` : '-'}</td>
                     <td>${s.volunteer || '-'}</td>

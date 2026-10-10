@@ -2,6 +2,7 @@ import os
 import shutil
 import csv
 import io
+import re
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, Response, send_file
 from tinydb import TinyDB, Query
@@ -33,6 +34,79 @@ def get_admin_password(db):
     if rec and rec.get('password'):
         return rec['password']
     return 'admin123'
+
+
+def resolve_student_record(students_table, raw_input):
+    """
+    Intelligently resolves a student or pass record matching the input.
+    Supports:
+    1. Direct barcode match (e.g. 'CARNIVAL0001', '26413', 'A11101')
+    2. Box Office serial syntax (e.g. 'CARNIVAL 1', '0001', '1', 'BO 42', 'CARNIVAL-100')
+    3. Exact roll number match
+    4. Clean symbol/whitespace-stripped match
+    Prioritizes PENDING records when duplicate numbers exist.
+    """
+    raw_str = (raw_input or '').strip()
+    if not raw_str:
+        return None, ''
+
+    raw_upper = raw_str.upper()
+    clean_upper = re.sub(r'[\s\-_#]+', '', raw_upper)
+    all_records = students_table.all()
+
+    # 1. Exact match on barcode
+    direct_matches = [
+        s for s in all_records
+        if (s.get('barcode') or '').strip().upper() in (raw_upper, clean_upper)
+    ]
+    if direct_matches:
+        pending = [m for m in direct_matches if m.get('status') != 'ENTERED']
+        return (pending[0] if pending else direct_matches[0]), direct_matches[0].get('barcode', raw_upper)
+
+    # 2. Box Office syntax expansion
+    bo_candidates = []
+    m_carnival = re.match(r'^CARNIVAL[^\d]*(\d+)$', clean_upper)
+    if m_carnival:
+        bo_candidates.append(f"CARNIVAL{int(m_carnival.group(1)):04d}")
+
+    m_bo = re.match(r'^(?:BO|BOX|BOXOFFICE)[^\d]*(\d+)$', clean_upper)
+    if m_bo:
+        bo_candidates.append(f"CARNIVAL{int(m_bo.group(1)):04d}")
+
+    # Pure numeric input if 1 to 4 digits (e.g. '1', '0001', '150')
+    if clean_upper.isdigit():
+        num = int(clean_upper)
+        if 1 <= num <= 1000:
+            bo_candidates.append(f"CARNIVAL{num:04d}")
+
+    for cand in bo_candidates:
+        bo_matches = [
+            s for s in all_records
+            if (s.get('barcode') or '').strip().upper() == cand
+        ]
+        if bo_matches:
+            pending = [m for m in bo_matches if m.get('status') != 'ENTERED']
+            return (pending[0] if pending else bo_matches[0]), cand
+
+    # 3. Roll number match
+    roll_matches = [
+        s for s in all_records
+        if (s.get('roll_no') or '').strip().upper() in (raw_upper, clean_upper)
+    ]
+    if roll_matches:
+        pending = [m for m in roll_matches if m.get('status') != 'ENTERED']
+        return (pending[0] if pending else roll_matches[0]), roll_matches[0].get('barcode', raw_upper)
+
+    # 4. Clean barcode stripped fallback
+    stripped_matches = [
+        s for s in all_records
+        if re.sub(r'[\s\-_#]+', '', (s.get('barcode') or '').upper()) == clean_upper
+    ]
+    if stripped_matches:
+        pending = [m for m in stripped_matches if m.get('status') != 'ENTERED']
+        return (pending[0] if pending else stripped_matches[0]), stripped_matches[0].get('barcode', raw_upper)
+
+    return None, raw_upper
 
 
 @app.route('/')
@@ -122,32 +196,13 @@ def scan_barcode():
                 'message': f'Please wait {remaining}s before scanning another pass. 4-second anti-duplicate delay active.'
             }), 429
 
-        barcode = raw_barcode.upper()
-        clean_barcode = barcode.replace(' ', '')
         db = get_db()
         students_table = db.table('students')
         logs_table = db.table('logs')
-        Student = Query()
 
-        # Find matching student(s)
-        matches = students_table.search(Student.barcode == barcode)
-        if not matches and clean_barcode != barcode:
-            matches = students_table.search(Student.barcode == clean_barcode)
-
-        if not matches:
-            for s in students_table.all():
-                s_bc = s.get('barcode', '').strip().upper()
-                if s_bc in (barcode, clean_barcode) or s_bc.replace(' ', '') == clean_barcode:
-                    matches.append(s)
-
-        # If multiple matches (e.g. across different colleges), prioritize PENDING student
-        student = None
-        if matches:
-            pending_matches = [m for m in matches if m.get('status') != 'ENTERED']
-            if pending_matches:
-                student = pending_matches[0]
-            else:
-                student = matches[0]
+        student, matched_barcode = resolve_student_record(students_table, raw_barcode)
+        barcode = matched_barcode or raw_barcode.upper()
+        clean_barcode = barcode.replace(' ', '')
 
         now = datetime.now()
         ts_iso = now.isoformat()
@@ -315,7 +370,9 @@ def get_students():
             name_match = search in s.get('name', '').lower()
             barcode_match = search in s.get('barcode', '').lower()
             roll_match = search in s.get('roll_no', '').lower()
-            if not (name_match or barcode_match or roll_match):
+            college_match = search in s.get('college', '').lower()
+            division_match = search in s.get('division', '').lower()
+            if not (name_match or barcode_match or roll_match or college_match or division_match):
                 continue
         results.append(s)
 
@@ -326,19 +383,19 @@ def get_students():
 @app.route('/api/manual-checkin', methods=['POST'])
 def manual_checkin():
     data = request.json or {}
-    barcode = data.get('barcode', '').strip().upper()
+    raw_barcode = data.get('barcode', '').strip()
     volunteer = data.get('volunteer', 'Admin Override').strip()
 
     db = get_db()
     students_table = db.table('students')
     logs_table = db.table('logs')
-    Student = Query()
 
-    student = students_table.get(Student.barcode == barcode)
+    student, matched_barcode = resolve_student_record(students_table, raw_barcode)
     if not student:
         db.close()
-        return jsonify({'success': False, 'message': 'Student not found'}), 404
+        return jsonify({'success': False, 'message': 'Student or pass not found'}), 404
 
+    barcode = matched_barcode or student.get('barcode', raw_barcode.upper())
     now = datetime.now()
     ts_iso = now.isoformat()
     formatted_date = now.strftime('%d %b %Y')
@@ -372,16 +429,15 @@ def manual_checkin():
 @app.route('/api/undo-checkin', methods=['POST'])
 def undo_checkin():
     data = request.json or {}
-    barcode = data.get('barcode', '').strip().upper()
+    raw_barcode = data.get('barcode', '').strip()
 
     db = get_db()
     students_table = db.table('students')
-    Student = Query()
 
-    student = students_table.get(Student.barcode == barcode)
+    student, _ = resolve_student_record(students_table, raw_barcode)
     if not student:
         db.close()
-        return jsonify({'success': False, 'message': 'Student not found'}), 404
+        return jsonify({'success': False, 'message': 'Student or pass not found'}), 404
 
     students_table.update({
         'status': 'PENDING',
