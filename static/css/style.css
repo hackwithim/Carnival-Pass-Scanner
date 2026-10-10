@@ -988,6 +988,10 @@ input:checked + .slider:before {
     border-top: 3px solid #10B981;
 }
 
+.college-card.boxoffice-theme {
+    border-top: 3px solid #F59E0B;
+}
+
 /* ==================== 4-SECOND VERIFICATION COOLDOWN SHIELD ==================== */
 .scan-cooldown-banner {
     margin-top: 1.2rem;

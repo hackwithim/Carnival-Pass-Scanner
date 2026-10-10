@@ -24,15 +24,19 @@ def init_database(force_reload=False):
     logs_table = db.table('logs')
     users_table = db.table('users')
 
-    # Seed users if empty
+    # Seed users if empty - ONLY Administrator
     if len(users_table) == 0:
-        users_table.insert_multiple([
-            {'username': 'admin', 'password': 'admin123', 'name': 'Super Admin', 'role': 'admin'},
-            {'username': 'gate1', 'password': 'gate123', 'name': 'Gate 1 Volunteer', 'role': 'volunteer'},
-            {'username': 'gate2', 'password': 'gate123', 'name': 'Gate 2 Volunteer', 'role': 'volunteer'},
-            {'username': 'volunteer', 'password': 'pass', 'name': 'Main Volunteer', 'role': 'volunteer'},
-        ])
-        print("Initialized default users: admin/admin123, gate1/gate123, volunteer/pass")
+        users_table.insert({
+            'username': 'admin',
+            'password': 'admin123',
+            'name': 'Super Admin',
+            'role': 'admin'
+        })
+        print("Initialized administrator account: admin/admin123")
+    else:
+        # Clean out any old dummy volunteer accounts
+        User = Query()
+        users_table.remove(User.username.one_of(['gate1', 'gate2', 'volunteer']))
 
     existing_count = len(students_table)
     if existing_count > 0 and not force_reload:
@@ -175,9 +179,30 @@ def init_database(force_reload=False):
                 new_students.append(rec)
                 existing_keys[key] = len(new_students) - 1
 
+    # 4. Load 1000 Box Office passes (CARNIVAL0001 to CARNIVAL1000)
+    for i in range(1, 1001):
+        barcode = f"CARNIVAL{i:04d}"
+        key = ('BOX OFFICE', barcode)
+        if key not in existing_keys:
+            cached = status_cache.get(barcode, {})
+            rec = {
+                'barcode': barcode,
+                'name': f"BOX OFFICE PASS #{i:04d}",
+                'college': 'BOX OFFICE',
+                'division': 'BO',
+                'roll_no': f"{i:04d}",
+                'status': cached.get('status', 'PENDING'),
+                'entry_timestamp': cached.get('entry_timestamp'),
+                'entry_date': cached.get('entry_date'),
+                'entry_time': cached.get('entry_time'),
+                'volunteer': cached.get('volunteer')
+            }
+            new_students.append(rec)
+            existing_keys[key] = len(new_students) - 1
+
     if new_students:
         students_table.insert_multiple(new_students)
-        print(f"Successfully populated {len(new_students)} students into NoSQL database!")
+        print(f"Successfully populated {len(new_students)} records into NoSQL database!")
 
     db.close()
 

@@ -72,12 +72,12 @@
                         <div id="volunteerFields">
                             <div class="form-group">
                                 <label for="volunteerStation"><i class="fa-solid fa-door-open"></i> Volunteer Username / Gate Station</label>
-                                <input type="text" id="volunteerStation" class="form-input" placeholder="e.g. gate1, gate2, or your Name" value="Gate 1 Volunteer">
+                                <input type="text" id="volunteerStation" class="form-input" placeholder="e.g. gate1, gate2, or your username">
                             </div>
                             <div class="form-group">
-                                <label for="volunteerPasscode"><i class="fa-solid fa-key"></i> Volunteer Password / Access Code</label>
+                                <label for="volunteerPasscode"><i class="fa-solid fa-key"></i> Volunteer Password</label>
                                 <div class="password-input-wrap">
-                                    <input type="password" id="volunteerPasscode" class="form-input" placeholder="Enter password (e.g. gate123 or pass)" value="pass">
+                                    <input type="password" id="volunteerPasscode" class="form-input" placeholder="Enter assigned password">
                                     <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('volunteerPasscode', 'eyeVolPass')">
                                         <i id="eyeVolPass" class="fa-solid fa-eye"></i>
                                     </button>
@@ -105,7 +105,7 @@
                     </form>
 
                     <div class="login-footer">
-                        <span>Default logins: Volunteer (<code>pass</code>) • Admin (<code>admin123</code>)</span>
+                        <span>System Access: Administrator (<code>admin</code> / <code>admin123</code>) • Volunteer staff accounts created via Admin Portal</span>
                     </div>
                 </div>
             </div>
@@ -262,12 +262,12 @@
             <div class="admin-layout">
                 <!-- Top Summary Cards -->
                 <div class="admin-metrics-grid">
-                    <div class="carnival-card metric-card total-metric clickable-card" onclick="filterByStatus('ALL')" title="Click to view all registered students">
+                    <div class="carnival-card metric-card total-metric clickable-card" onclick="filterByStatus('ALL')" title="Click to view all registered passes">
                         <div class="metric-icon"><i class="fa-solid fa-users"></i></div>
                         <div class="metric-info">
                             <span class="metric-title">TOTAL REGISTERED</span>
-                            <h2 id="adminTotalRegistered" class="metric-num">1201</h2>
-                            <span class="metric-sub">Across 4 Institutions (Day 1 + Day 2)</span>
+                            <h2 id="adminTotalRegistered" class="metric-num">2201</h2>
+                            <span class="metric-sub">Across 4 Institutions + Box Office Passes</span>
                         </div>
                     </div>
                     <div class="carnival-card metric-card entered-metric clickable-card" onclick="filterByStatus('ENTERED')" title="Click to view entered students only">
@@ -280,11 +280,11 @@
                             </div>
                         </div>
                     </div>
-                    <div class="carnival-card metric-card pending-metric clickable-card" onclick="filterByStatus('PENDING')" title="Click to view pending arrival students only">
+                    <div class="carnival-card metric-card pending-metric clickable-card" onclick="filterByStatus('PENDING')" title="Click to view pending arrival passes only">
                         <div class="metric-icon"><i class="fa-solid fa-clock"></i></div>
                         <div class="metric-info">
                             <span class="metric-title">PENDING ARRIVAL</span>
-                            <h2 id="adminTotalPending" class="metric-num">1201</h2>
+                            <h2 id="adminTotalPending" class="metric-num">2201</h2>
                             <span id="adminAttendanceRate" class="metric-sub text-accent">0% Attendance</span>
                         </div>
                     </div>
@@ -355,19 +355,36 @@
                             <div class="c-num"><strong id="dypsoaPct">0%</strong><span>Rate</span></div>
                         </div>
                     </div>
+
+                    <!-- BOX OFFICE -->
+                    <div class="carnival-card college-card boxoffice-theme clickable-card" onclick="filterByCollege('BOX OFFICE')" title="Click to filter by BOX OFFICE passes">
+                        <div class="college-header">
+                            <div class="college-title-group">
+                                <h3>BOX OFFICE</h3>
+                                <p>Special Passes (CARNIVAL0001 - 1000)</p>
+                            </div>
+                            <span class="badge badge-college">1000 Total</span>
+                        </div>
+                        <div class="college-numbers">
+                            <div class="c-num"><strong id="boxofficeEntered">0</strong><span>Entered</span></div>
+                            <div class="c-num"><strong id="boxofficePending">1000</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="boxofficePct">0%</strong><span>Rate</span></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Admin Action Toolbar -->
                 <div class="admin-toolbar carnival-card">
                     <div class="toolbar-left">
                         <div class="filter-group">
-                            <label><i class="fa-solid fa-building-columns"></i> College:</label>
+                            <label><i class="fa-solid fa-building-columns"></i> Category:</label>
                             <select id="filterCollege" class="form-select" onchange="fetchStudentsTable()">
-                                <option value="ALL">All Institutions (1201)</option>
+                                <option value="ALL">All Categories (2201)</option>
                                 <option value="DYPIMED">DYPIMED (206)</option>
                                 <option value="DYPCOEI">DYPCOEI (449)</option>
                                 <option value="DYPTC">DYPTC (512)</option>
                                 <option value="DYPSOA">DYPSOA (34)</option>
+                                <option value="BOX OFFICE">BOX OFFICE (1000)</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -565,11 +582,12 @@
                 <div class="form-group">
                     <label for="resetScopeSelect"><i class="fa-solid fa-building-columns"></i> Select Reset Scope:</label>
                     <select id="resetScopeSelect" class="form-select">
-                        <option value="ALL">Reset ALL Colleges (Entire Database - 1201 students)</option>
+                        <option value="ALL">Reset Entire Database (2201 records)</option>
                         <option value="DYPIMED">Reset DYPIMED Entries Only (206 students)</option>
                         <option value="DYPCOEI">Reset DYPCOEI Entries Only (449 students)</option>
                         <option value="DYPTC">Reset DYPTC Entries Only (512 students)</option>
                         <option value="DYPSOA">Reset DYPSOA Entries Only (34 students)</option>
+                        <option value="BOX OFFICE">Reset BOX OFFICE Passes Only (1000 passes)</option>
                     </select>
                 </div>
                 <div class="form-group">

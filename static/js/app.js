@@ -634,6 +634,14 @@ async function fetchAdminStats() {
         if (soaPend) soaPend.textContent = soa.pending || 0;
         if (soaPct) soaPct.textContent = `${soa.percentage || 0}%`;
 
+        const bo = data.colleges['BOX OFFICE'] || {};
+        const boEnt = document.getElementById('boxofficeEntered');
+        const boPend = document.getElementById('boxofficePending');
+        const boPct = document.getElementById('boxofficePct');
+        if (boEnt) boEnt.textContent = bo.entered || 0;
+        if (boPend) boPend.textContent = bo.pending || 0;
+        if (boPct) boPct.textContent = `${bo.percentage || 0}%`;
+
     } catch (err) {
         console.error('Failed to fetch admin stats:', err);
     }

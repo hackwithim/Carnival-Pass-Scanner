@@ -86,18 +86,6 @@ def login():
             'token': f"vol-{matched_user.get('username')}-token"
         })
 
-    # Quick volunteer sign-in with custom name & standard passcodes
-    if (volunteer_name or username) and password in ('pass', 'gate123', 'volunteer123', '1234'):
-        vol_display = volunteer_name or username
-        db.close()
-        return jsonify({
-            'success': True,
-            'role': 'volunteer',
-            'username': vol_display.lower().replace(' ', '_'),
-            'name': vol_display,
-            'token': f"vol-{datetime.now().timestamp()}"
-        })
-
     db.close()
     return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
 
@@ -279,7 +267,7 @@ def get_stats():
     pending = total - entered
     overall_pct = round((entered / total * 100), 1) if total > 0 else 0
 
-    colleges = {'DYPIMED': {}, 'DYPCOEI': {}, 'DYPTC': {}, 'DYPSOA': {}}
+    colleges = {'DYPIMED': {}, 'DYPCOEI': {}, 'DYPTC': {}, 'DYPSOA': {}, 'BOX OFFICE': {}}
     for c in colleges.keys():
         c_students = [s for s in all_students if s.get('college') == c]
         c_total = len(c_students)
@@ -522,10 +510,7 @@ def get_admin_users():
 
     usernames = [u['username'] for u in users]
     defaults = [
-        {'username': 'admin', 'name': 'Administrator', 'role': 'admin'},
-        {'username': 'gate1', 'name': 'Gate 1 Volunteer', 'role': 'volunteer'},
-        {'username': 'gate2', 'name': 'Gate 2 Volunteer', 'role': 'volunteer'},
-        {'username': 'volunteer', 'name': 'Main Volunteer', 'role': 'volunteer'}
+        {'username': 'admin', 'name': 'Administrator', 'role': 'admin'}
     ]
     for d in defaults:
         if d['username'] not in usernames:
