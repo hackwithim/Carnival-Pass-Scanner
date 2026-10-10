@@ -123,6 +123,58 @@ def init_database(force_reload=False):
                 'volunteer': cached.get('volunteer')
             })
 
+    # 3. Load DAY2.csv for all colleges (DYPIMED, DYPTC, DYPCOEI, DYPSOA)
+    day2_csv = os.path.join(BASE_DIR, 'DAY2.csv')
+    if os.path.exists(day2_csv):
+        with open(day2_csv, mode='r', encoding='utf-8-sig', errors='replace') as f:
+            rows = list(csv.reader(f))
+
+        current_college = 'UNKNOWN'
+        # Track existing student keys (college, barcode) to avoid duplicate entries
+        existing_keys = {(s['college'], s['barcode'].strip().upper()): idx for idx, s in enumerate(new_students)}
+
+        for idx, row in enumerate(rows):
+            line_str = ' '.join(row).upper()
+            for col in ['DYPIMED', 'DYPTC', 'DYPCOEI', 'DYPSOA']:
+                if col in line_str and len([x for x in row if x.strip()]) <= 2:
+                    current_college = col
+                    break
+
+            if len(row) < 4:
+                continue
+
+            name = row[1].strip()
+            div = row[2].strip()
+            sid = row[3].strip()
+
+            if not name or not sid or name.upper() in ('POLYTECHNIC', 'BOX OFFICE'):
+                continue
+
+            barcode = sid.strip().upper()
+            key = (current_college, barcode)
+
+            if key in existing_keys:
+                # Update existing name if DAY2 has a more complete name
+                prev_idx = existing_keys[key]
+                if len(name) > len(new_students[prev_idx]['name']):
+                    new_students[prev_idx]['name'] = name.upper()
+            else:
+                cached = status_cache.get(barcode, {})
+                rec = {
+                    'barcode': barcode,
+                    'name': name.upper(),
+                    'college': current_college,
+                    'division': div,
+                    'roll_no': sid,
+                    'status': cached.get('status', 'PENDING'),
+                    'entry_timestamp': cached.get('entry_timestamp'),
+                    'entry_date': cached.get('entry_date'),
+                    'entry_time': cached.get('entry_time'),
+                    'volunteer': cached.get('volunteer')
+                }
+                new_students.append(rec)
+                existing_keys[key] = len(new_students) - 1
+
     if new_students:
         students_table.insert_multiple(new_students)
         print(f"Successfully populated {len(new_students)} students into NoSQL database!")
@@ -131,3 +183,4 @@ def init_database(force_reload=False):
 
 if __name__ == '__main__':
     init_database(force_reload=True)
+

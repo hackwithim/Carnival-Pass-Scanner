@@ -3,9 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Large generated PDF assets (exceeds GitHub 100MB limit)
+# Large generated PDF / ZIP assets (exceeds GitHub 100MB limit)
 # Note: Re-generate anytime using python generate_*_passes.py
 *.pdf
+*.zip
 passes/
 
 # Environments & IDEs

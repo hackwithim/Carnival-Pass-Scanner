@@ -71,12 +71,17 @@
                         <!-- Volunteer Fields -->
                         <div id="volunteerFields">
                             <div class="form-group">
-                                <label for="volunteerStation"><i class="fa-solid fa-door-open"></i> Gate / Volunteer Name</label>
-                                <input type="text" id="volunteerStation" class="form-input" placeholder="e.g. Gate 1, Gate 2, or your Name" value="Gate 1 Volunteer">
+                                <label for="volunteerStation"><i class="fa-solid fa-door-open"></i> Volunteer Username / Gate Station</label>
+                                <input type="text" id="volunteerStation" class="form-input" placeholder="e.g. gate1, gate2, or your Name" value="Gate 1 Volunteer">
                             </div>
                             <div class="form-group">
-                                <label for="volunteerPasscode"><i class="fa-solid fa-key"></i> Volunteer Access Code</label>
-                                <input type="password" id="volunteerPasscode" class="form-input" placeholder="Enter pass code (default: pass)" value="pass">
+                                <label for="volunteerPasscode"><i class="fa-solid fa-key"></i> Volunteer Password / Access Code</label>
+                                <div class="password-input-wrap">
+                                    <input type="password" id="volunteerPasscode" class="form-input" placeholder="Enter password (e.g. gate123 or pass)" value="pass">
+                                    <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('volunteerPasscode', 'eyeVolPass')">
+                                        <i id="eyeVolPass" class="fa-solid fa-eye"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -131,6 +136,24 @@
                                         <span class="slider"></span>
                                     </label>
                                     <span><i class="fa-solid fa-volume-high"></i> Sound Feedback</span>
+                                </div>
+                            </div>
+
+                            <!-- 4-Second Verification Cooldown Banner (Anti-Multiple-Entry Shield) -->
+                            <div id="scanCooldownBanner" class="scan-cooldown-banner hidden">
+                                <div class="cooldown-header">
+                                    <span class="cooldown-title">
+                                        <i class="fa-solid fa-shield-halved fa-spin"></i> 
+                                        <strong>Cooldown Active:</strong> 
+                                        <span id="cooldownTimerText">4.0s</span>
+                                    </span>
+                                    <span class="cooldown-badge">Multiple Entries Protected</span>
+                                </div>
+                                <div class="cooldown-track">
+                                    <div id="cooldownProgressBar" class="cooldown-bar"></div>
+                                </div>
+                                <div class="cooldown-hint">
+                                    <i class="fa-solid fa-lock"></i> 4-second cooldown active. Scanner is paused to avoid multiple entries at a time.
                                 </div>
                             </div>
                         </div>
@@ -239,15 +262,15 @@
             <div class="admin-layout">
                 <!-- Top Summary Cards -->
                 <div class="admin-metrics-grid">
-                    <div class="carnival-card metric-card total-metric">
+                    <div class="carnival-card metric-card total-metric clickable-card" onclick="filterByStatus('ALL')" title="Click to view all registered students">
                         <div class="metric-icon"><i class="fa-solid fa-users"></i></div>
                         <div class="metric-info">
                             <span class="metric-title">TOTAL REGISTERED</span>
-                            <h2 id="adminTotalRegistered" class="metric-num">733</h2>
-                            <span class="metric-sub">Across 3 Institutions</span>
+                            <h2 id="adminTotalRegistered" class="metric-num">1201</h2>
+                            <span class="metric-sub">Across 4 Institutions (Day 1 + Day 2)</span>
                         </div>
                     </div>
-                    <div class="carnival-card metric-card entered-metric">
+                    <div class="carnival-card metric-card entered-metric clickable-card" onclick="filterByStatus('ENTERED')" title="Click to view entered students only">
                         <div class="metric-icon"><i class="fa-solid fa-user-check"></i></div>
                         <div class="metric-info">
                             <span class="metric-title">TOTAL ENTERED</span>
@@ -257,11 +280,11 @@
                             </div>
                         </div>
                     </div>
-                    <div class="carnival-card metric-card pending-metric">
+                    <div class="carnival-card metric-card pending-metric clickable-card" onclick="filterByStatus('PENDING')" title="Click to view pending arrival students only">
                         <div class="metric-icon"><i class="fa-solid fa-clock"></i></div>
                         <div class="metric-info">
                             <span class="metric-title">PENDING ARRIVAL</span>
-                            <h2 id="adminTotalPending" class="metric-num">733</h2>
+                            <h2 id="adminTotalPending" class="metric-num">1201</h2>
                             <span id="adminAttendanceRate" class="metric-sub text-accent">0% Attendance</span>
                         </div>
                     </div>
@@ -270,50 +293,66 @@
                 <!-- College Breakdown Grid -->
                 <div class="colleges-grid">
                     <!-- DYPIMED -->
-                    <div class="carnival-card college-card dypimed-theme">
+                    <div class="carnival-card college-card dypimed-theme clickable-card" onclick="filterByCollege('DYPIMED')" title="Click to filter by DYPIMED">
                         <div class="college-header">
                             <div class="college-title-group">
                                 <h3>DYPIMED</h3>
                                 <p>Inst. of Management (MCA / MBA)</p>
                             </div>
-                            <span class="badge badge-college">150 Seats</span>
+                            <span class="badge badge-college">206 Total</span>
                         </div>
                         <div class="college-numbers">
                             <div class="c-num"><strong id="dypimedEntered">0</strong><span>Entered</span></div>
-                            <div class="c-num"><strong id="dypimedPending">150</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dypimedPending">206</strong><span>Pending</span></div>
                             <div class="c-num"><strong id="dypimedPct">0%</strong><span>Rate</span></div>
                         </div>
                     </div>
 
                     <!-- DYPCOEI -->
-                    <div class="carnival-card college-card dypcoei-theme">
+                    <div class="carnival-card college-card dypcoei-theme clickable-card" onclick="filterByCollege('DYPCOEI')" title="Click to filter by DYPCOEI">
                         <div class="college-header">
                             <div class="college-title-group">
                                 <h3>DYPCOEI</h3>
-                                <p>College of Engg & Innovation (FE)</p>
+                                <p>College of Engg & Innovation</p>
                             </div>
-                            <span class="badge badge-college">289 Seats</span>
+                            <span class="badge badge-college">449 Total</span>
                         </div>
                         <div class="college-numbers">
                             <div class="c-num"><strong id="dypcoeiEntered">0</strong><span>Entered</span></div>
-                            <div class="c-num"><strong id="dypcoeiPending">289</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dypcoeiPending">449</strong><span>Pending</span></div>
                             <div class="c-num"><strong id="dypcoeiPct">0%</strong><span>Rate</span></div>
                         </div>
                     </div>
 
                     <!-- DYPTC -->
-                    <div class="carnival-card college-card dyptc-theme">
+                    <div class="carnival-card college-card dyptc-theme clickable-card" onclick="filterByCollege('DYPTC')" title="Click to filter by DYPTC">
                         <div class="college-header">
                             <div class="college-title-group">
                                 <h3>DYPTC</h3>
-                                <p>Technical Campus (FE Engg)</p>
+                                <p>Technical Campus (FE / TE / Poly)</p>
                             </div>
-                            <span class="badge badge-college">294 Seats</span>
+                            <span class="badge badge-college">512 Total</span>
                         </div>
                         <div class="college-numbers">
                             <div class="c-num"><strong id="dyptcEntered">0</strong><span>Entered</span></div>
-                            <div class="c-num"><strong id="dyptcPending">294</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dyptcPending">512</strong><span>Pending</span></div>
                             <div class="c-num"><strong id="dyptcPct">0%</strong><span>Rate</span></div>
+                        </div>
+                    </div>
+
+                    <!-- DYPSOA -->
+                    <div class="carnival-card college-card dypsoa-theme clickable-card" onclick="filterByCollege('DYPSOA')" title="Click to filter by DYPSOA">
+                        <div class="college-header">
+                            <div class="college-title-group">
+                                <h3>DYPSOA</h3>
+                                <p>School of Architecture (B.Arch)</p>
+                            </div>
+                            <span class="badge badge-college">34 Total</span>
+                        </div>
+                        <div class="college-numbers">
+                            <div class="c-num"><strong id="dypsoaEntered">0</strong><span>Entered</span></div>
+                            <div class="c-num"><strong id="dypsoaPending">34</strong><span>Pending</span></div>
+                            <div class="c-num"><strong id="dypsoaPct">0%</strong><span>Rate</span></div>
                         </div>
                     </div>
                 </div>
@@ -324,10 +363,11 @@
                         <div class="filter-group">
                             <label><i class="fa-solid fa-building-columns"></i> College:</label>
                             <select id="filterCollege" class="form-select" onchange="fetchStudentsTable()">
-                                <option value="ALL">All Institutions (733)</option>
-                                <option value="DYPIMED">DYPIMED (150)</option>
-                                <option value="DYPCOEI">DYPCOEI (289)</option>
-                                <option value="DYPTC">DYPTC (294)</option>
+                                <option value="ALL">All Institutions (1201)</option>
+                                <option value="DYPIMED">DYPIMED (206)</option>
+                                <option value="DYPCOEI">DYPCOEI (449)</option>
+                                <option value="DYPTC">DYPTC (512)</option>
+                                <option value="DYPSOA">DYPSOA (34)</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -344,13 +384,16 @@
                         </div>
                     </div>
                     <div class="toolbar-right">
-                        <button type="button" class="btn btn-secondary" onclick="openPasswordModal()">
+                        <button type="button" class="btn btn-primary" onclick="openVolunteerModal()" title="Manage volunteer accounts & passwords">
+                            <i class="fa-solid fa-users-gear"></i> Manage Volunteers
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="openPasswordModal()" title="Change administrator or gate passwords">
                             <i class="fa-solid fa-key"></i> Change Password
                         </button>
-                        <a href="/api/export-csv" class="btn btn-secondary">
+                        <a href="/api/export-csv" class="btn btn-secondary" title="Download complete attendance as CSV">
                             <i class="fa-solid fa-file-csv"></i> Export CSV
                         </a>
-                        <button type="button" class="btn btn-danger" onclick="openResetModal()">
+                        <button type="button" class="btn btn-danger" onclick="openResetModal()" title="Reset entry status back to Pending">
                             <i class="fa-solid fa-rotate-left"></i> Reset Entries
                         </button>
                     </div>
@@ -388,8 +431,68 @@
         </section>
     </main>
 
+    <!-- ==================== VOLUNTEER MANAGEMENT MODAL ==================== -->
+    <div id="volunteerModal" class="modal-overlay hidden" onclick="handleOverlayClick(event, 'volunteerModal')">
+        <div class="carnival-card modal-card volunteer-modal-card">
+            <div class="modal-header">
+                <div class="modal-icon text-accent"><i class="fa-solid fa-users-gear"></i></div>
+                <h3>Volunteer Access & Team Management</h3>
+                <button type="button" class="modal-close" onclick="closeVolunteerModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-intro">
+                    Create gate volunteer scanner accounts, remove old staff, and manage passwords for entry checkpoints.
+                </p>
+
+                <!-- Add Volunteer Form Card -->
+                <div class="volunteer-form-card">
+                    <h4><i class="fa-solid fa-user-plus"></i> Add New Volunteer Scanner</h4>
+                    <form id="addVolunteerForm" onsubmit="executeAddVolunteer(event)">
+                        <div class="form-row-grid">
+                            <div class="form-group">
+                                <label for="volNewUsername"><i class="fa-solid fa-at"></i> Username (Login ID)</label>
+                                <input type="text" id="volNewUsername" class="form-input" placeholder="e.g. gate3, rahul" required autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label for="volNewName"><i class="fa-solid fa-id-card"></i> Station / Display Name</label>
+                                <input type="text" id="volNewName" class="form-input" placeholder="e.g. Gate 3 Volunteer, Rahul" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="volNewPassword"><i class="fa-solid fa-key"></i> Access Password</label>
+                            <div class="password-input-wrap">
+                                <input type="password" id="volNewPassword" class="form-input" placeholder="Min 4 characters (e.g. gate123)" required>
+                                <button type="button" class="pwd-toggle-btn" onclick="togglePasswordVisibility('volNewPassword', 'eyeVolNew')">
+                                    <i id="eyeVolNew" class="fa-solid fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="volunteerAddAlert" class="alert-banner error hidden"></div>
+                        <button type="submit" id="addVolunteerBtn" class="btn btn-primary btn-sm">
+                            <i class="fa-solid fa-plus"></i> Add Volunteer
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Active Volunteers Directory -->
+                <div class="volunteer-directory-section">
+                    <div class="section-subhead">
+                        <h4><i class="fa-solid fa-list-check"></i> Registered Staff & Gate Scanners</h4>
+                        <span id="volunteerCountBadge" class="badge badge-pill">Loading...</span>
+                    </div>
+                    <div id="volunteersListContainer" class="volunteers-list-wrap">
+                        <div class="text-center py-3 text-muted">Loading team accounts...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeVolunteerModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== CHANGE PASSWORD MODAL ==================== -->
-    <div id="passwordModal" class="modal-overlay hidden">
+    <div id="passwordModal" class="modal-overlay hidden" onclick="handleOverlayClick(event, 'passwordModal')">
         <div class="carnival-card modal-card password-modal-card">
             <div class="modal-header">
                 <div class="modal-icon text-accent"><i class="fa-solid fa-shield-halved"></i></div>
@@ -448,7 +551,7 @@
     </div>
 
     <!-- ==================== RESET ENTRIES MODAL ==================== -->
-    <div id="resetModal" class="modal-overlay hidden">
+    <div id="resetModal" class="modal-overlay hidden" onclick="handleOverlayClick(event, 'resetModal')">
         <div class="carnival-card modal-card">
             <div class="modal-header">
                 <div class="modal-icon text-danger"><i class="fa-solid fa-triangle-exclamation"></i></div>
@@ -462,10 +565,11 @@
                 <div class="form-group">
                     <label for="resetScopeSelect"><i class="fa-solid fa-building-columns"></i> Select Reset Scope:</label>
                     <select id="resetScopeSelect" class="form-select">
-                        <option value="ALL">Reset ALL Colleges (Entire Database)</option>
-                        <option value="DYPIMED">Reset DYPIMED Entries Only (150 students)</option>
-                        <option value="DYPCOEI">Reset DYPCOEI Entries Only (289 students)</option>
-                        <option value="DYPTC">Reset DYPTC Entries Only (294 students)</option>
+                        <option value="ALL">Reset ALL Colleges (Entire Database - 1201 students)</option>
+                        <option value="DYPIMED">Reset DYPIMED Entries Only (206 students)</option>
+                        <option value="DYPCOEI">Reset DYPCOEI Entries Only (449 students)</option>
+                        <option value="DYPTC">Reset DYPTC Entries Only (512 students)</option>
+                        <option value="DYPSOA">Reset DYPSOA Entries Only (34 students)</option>
                     </select>
                 </div>
                 <div class="form-group">

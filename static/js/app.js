@@ -5,6 +5,9 @@ let currentView = 'login';
 let html5QrCode = null;
 let cameraActive = false;
 let isProcessingScan = false;
+let isScanCooldown = false;
+let cooldownInterval = null;
+const SCAN_COOLDOWN_MS = 4000;
 let sessionStats = { scans: 0, admitted: 0, denied: 0 };
 let searchDebounceTimer = null;
 let adminPollInterval = null;
@@ -100,6 +103,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Global Escape key listener to close modals
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closePasswordModal();
+            closeResetModal();
+            closeVolunteerModal();
+        }
+    });
+
     // Barcode input enter listener
     const barcodeInput = document.getElementById('barcodeInput');
     if (barcodeInput) {
@@ -114,14 +126,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep scanner input focused when in scanner view
     document.addEventListener('click', (e) => {
         if (currentView === 'scanner' && !cameraActive) {
-            const isClickInsideInteractive = e.target.closest('button, a, input, select, textarea');
+            const isClickInsideInteractive = e.target.closest('button, a, input, select, textarea, .modal-card');
             if (!isClickInsideInteractive) {
                 const inp = document.getElementById('barcodeInput');
-                if (inp) inp.focus();
+                if (inp && !inp.disabled) inp.focus();
             }
         }
     });
 });
+
+function handleOverlayClick(e, modalId) {
+    if (e.target && e.target.id === modalId) {
+        if (modalId === 'passwordModal') closePasswordModal();
+        else if (modalId === 'resetModal') closeResetModal();
+        else if (modalId === 'volunteerModal') closeVolunteerModal();
+    }
+}
 
 // ==================== AUTHENTICATION ====================
 function setLoginRole(role) {
@@ -160,8 +180,10 @@ async function handleLogin(e) {
             password: document.getElementById('adminPassword').value.trim()
         };
     } else {
+        const stationVal = document.getElementById('volunteerStation').value.trim() || 'Volunteer';
         payload = {
-            volunteer_name: document.getElementById('volunteerStation').value.trim() || 'Volunteer',
+            username: stationVal,
+            volunteer_name: stationVal,
             password: document.getElementById('volunteerPasscode').value.trim() || 'pass'
         };
     }
@@ -271,17 +293,91 @@ function switchView(viewName) {
     }
 }
 
-// ==================== SCANNER LOGIC ====================
-function processManualInput() {
+// ==================== 4-SECOND COOLDOWN & SCANNER LOGIC ====================
+function startScanCooldown(durationMs = 4000) {
+    if (cooldownInterval) clearInterval(cooldownInterval);
+    isScanCooldown = true;
+
+    // Pause camera scanning if active to prevent continuous frame hits
+    if (html5QrCode && cameraActive) {
+        try { html5QrCode.pause(); } catch(e) {}
+    }
+
+    const banner = document.getElementById('scanCooldownBanner');
+    const timerText = document.getElementById('cooldownTimerText');
+    const bar = document.getElementById('cooldownProgressBar');
     const input = document.getElementById('barcodeInput');
-    const val = input.value.trim();
-    if (!val) return;
+    const checkBtn = document.querySelector('.btn-scan');
+
+    if (banner) banner.classList.remove('hidden');
+    if (input) {
+        input.disabled = true;
+        input.placeholder = '🔒 4s cooldown active: Waiting before next scan...';
+    }
+    if (checkBtn) {
+        checkBtn.classList.add('btn-cooldown');
+        checkBtn.title = '4-second cooldown active';
+    }
+
+    const startTime = Date.now();
+    const endTime = startTime + durationMs;
+
+    cooldownInterval = setInterval(() => {
+        const remaining = Math.max(0, endTime - Date.now());
+        const seconds = (remaining / 1000).toFixed(1);
+
+        if (timerText) timerText.textContent = `${seconds}s`;
+        if (bar) {
+            const pct = (remaining / durationMs) * 100;
+            bar.style.width = `${pct}%`;
+        }
+
+        if (remaining <= 0) {
+            clearInterval(cooldownInterval);
+            cooldownInterval = null;
+            isScanCooldown = false;
+
+            if (banner) banner.classList.add('hidden');
+            if (input) {
+                input.disabled = false;
+                input.value = '';
+                input.placeholder = 'Scan Barcode with Gun OR Type ID (e.g. 26413, A11101)...';
+                input.focus();
+            }
+            if (checkBtn) {
+                checkBtn.classList.remove('btn-cooldown');
+                checkBtn.title = 'Check Barcode';
+            }
+
+            // Resume camera scanning if enabled
+            if (html5QrCode && cameraActive) {
+                try { html5QrCode.resume(); } catch(e) {}
+            }
+        }
+    }, 50);
+}
+
+function processManualInput() {
+    if (isScanCooldown) {
+        showToast('⏳ Anti-duplicate shield: Please wait for the 4s cooldown before checking another pass.', 'info');
+        return;
+    }
+    const input = document.getElementById('barcodeInput');
+    const val = input ? input.value.trim() : '';
+    if (!val) {
+        showToast('Please enter or scan a barcode pass ID first.', 'info');
+        if (input && !input.disabled) input.focus();
+        return;
+    }
     executeScan(val);
     input.value = '';
-    input.focus();
 }
 
 async function executeScan(barcode) {
+    if (isScanCooldown) {
+        showToast('⏳ Cooldown active: Please wait 4s between student passes.', 'info');
+        return;
+    }
     if (isProcessingScan) return;
     isProcessingScan = true;
 
@@ -298,16 +394,24 @@ async function executeScan(barcode) {
         });
         const data = await res.json();
 
+        if (res.status === 429 || data.status === 'COOLDOWN_ACTIVE') {
+            showToast(data.message || 'Please wait before scanning again.', 'info');
+            const waitMs = data.cooldown_remaining ? Math.round(data.cooldown_remaining * 1000) : 4000;
+            startScanCooldown(waitMs);
+            return;
+        }
+
         handleScanResult(data, barcode);
+
+        // Enforce 4-second delay before scanning next pass
+        startScanCooldown(4000);
     } catch (err) {
         showToast('Error communicating with verification server', 'error');
     } finally {
         isProcessingScan = false;
-        // Refocus input bar
-        const inp = document.getElementById('barcodeInput');
-        if (inp) inp.focus();
     }
 }
+
 
 function handleScanResult(res, rawBarcode) {
     sessionStats.scans++;
@@ -463,8 +567,8 @@ function startCameraScanner() {
         { facingMode: "environment" },
         config,
         (decodedText) => {
-            // Success scan
-            if (!isProcessingScan) {
+            // Success scan - strictly check both processing flag and 4-second cooldown
+            if (!isProcessingScan && !isScanCooldown) {
                 executeScan(decodedText);
             }
         },
@@ -522,10 +626,19 @@ async function fetchAdminStats() {
         document.getElementById('dyptcPending').textContent = tc.pending || 0;
         document.getElementById('dyptcPct').textContent = `${tc.percentage || 0}%`;
 
+        const soa = data.colleges.DYPSOA || {};
+        const soaEnt = document.getElementById('dypsoaEntered');
+        const soaPend = document.getElementById('dypsoaPending');
+        const soaPct = document.getElementById('dypsoaPct');
+        if (soaEnt) soaEnt.textContent = soa.entered || 0;
+        if (soaPend) soaPend.textContent = soa.pending || 0;
+        if (soaPct) soaPct.textContent = `${soa.percentage || 0}%`;
+
     } catch (err) {
         console.error('Failed to fetch admin stats:', err);
     }
 }
+
 
 function debounceSearch() {
     clearTimeout(searchDebounceTimer);
@@ -624,12 +737,253 @@ async function undoCheckin(barcode) {
     }
 }
 
+// ==================== INTERACTIVE QUICK FILTERS ====================
+function filterByCollege(college) {
+    const select = document.getElementById('filterCollege');
+    if (select) {
+        select.value = college;
+        fetchStudentsTable();
+        showToast(`Filtered by ${college}`, 'info');
+        const tableCard = document.querySelector('.table-card');
+        if (tableCard) {
+            tableCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+}
+
+function filterByStatus(status) {
+    const select = document.getElementById('filterStatus');
+    if (select) {
+        select.value = status;
+        if (status === 'ALL') {
+            const colSelect = document.getElementById('filterCollege');
+            if (colSelect) colSelect.value = 'ALL';
+        }
+        fetchStudentsTable();
+        const label = status === 'ALL' ? 'All Registered' : (status === 'ENTERED' ? 'Entered Students' : 'Pending Arrival');
+        showToast(`Filtered by ${label}`, 'info');
+        const tableCard = document.querySelector('.table-card');
+        if (tableCard) {
+            tableCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+}
+
+// ==================== VOLUNTEER MANAGEMENT ====================
+async function openVolunteerModal() {
+    const modal = document.getElementById('volunteerModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.getElementById('volNewUsername').value = '';
+    document.getElementById('volNewName').value = '';
+    document.getElementById('volNewPassword').value = '';
+    const alertBox = document.getElementById('volunteerAddAlert');
+    if (alertBox) alertBox.classList.add('hidden');
+    fetchVolunteersList();
+}
+
+function closeVolunteerModal() {
+    const modal = document.getElementById('volunteerModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function fetchVolunteersList() {
+    const container = document.getElementById('volunteersListContainer');
+    const badge = document.getElementById('volunteerCountBadge');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/admin/volunteers');
+        const data = await res.json();
+
+        if (!data.success || !data.volunteers) {
+            container.innerHTML = '<div class="text-center py-3 text-danger">Failed to load volunteers</div>';
+            return;
+        }
+
+        const vols = data.volunteers;
+        if (badge) badge.textContent = `${vols.length} Accounts`;
+
+        if (vols.length === 0) {
+            container.innerHTML = '<div class="text-center py-3 text-muted">No volunteer accounts registered.</div>';
+            return;
+        }
+
+        container.innerHTML = vols.map(v => {
+            const isAdmin = v.username === 'admin';
+            const rolePill = isAdmin 
+                ? '<span class="role-pill-admin"><i class="fa-solid fa-shield"></i> Admin</span>'
+                : '<span class="role-pill-vol"><i class="fa-solid fa-user-check"></i> Volunteer</span>';
+
+            const deleteAction = isAdmin 
+                ? '<span class="system-tag"><i class="fa-solid fa-lock"></i> Protected</span>'
+                : `<button type="button" class="btn btn-danger btn-xs" onclick="deleteVolunteer('${v.username}')" title="Remove Volunteer Account"><i class="fa-solid fa-trash-can"></i> Remove</button>`;
+
+            return `
+                <div class="volunteer-row-card">
+                    <div class="vol-info-group">
+                        <div class="vol-icon ${isAdmin ? 'admin-theme' : 'vol-theme'}">
+                            <i class="fa-solid ${isAdmin ? 'fa-user-shield' : 'fa-id-badge'}"></i>
+                        </div>
+                        <div class="vol-names">
+                            <strong>${v.name || v.username}</strong>
+                            <span class="vol-uname"><i class="fa-solid fa-at"></i>${v.username}</span>
+                        </div>
+                    </div>
+                    <div class="vol-role-group">
+                        ${rolePill}
+                    </div>
+                    <div class="vol-actions-group">
+                        <button type="button" class="btn btn-secondary btn-xs" onclick="quickUpdateVolunteerPassword('${v.username}')" title="Reset this volunteer's password">
+                            <i class="fa-solid fa-key"></i> Reset Pass
+                        </button>
+                        ${deleteAction}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (err) {
+        container.innerHTML = '<div class="text-center py-3 text-danger">Error loading volunteers</div>';
+    }
+}
+
+async function executeAddVolunteer(e) {
+    e.preventDefault();
+    const username = document.getElementById('volNewUsername').value.trim();
+    const name = document.getElementById('volNewName').value.trim();
+    const password = document.getElementById('volNewPassword').value.trim();
+    const alertBox = document.getElementById('volunteerAddAlert');
+    const submitBtn = document.getElementById('addVolunteerBtn');
+
+    if (alertBox) alertBox.classList.add('hidden');
+
+    if (!username || !password) {
+        if (alertBox) {
+            alertBox.textContent = 'Username and password are required.';
+            alertBox.classList.remove('hidden');
+        }
+        return;
+    }
+
+    if (password.length < 4) {
+        if (alertBox) {
+            alertBox.textContent = 'Password must be at least 4 characters long.';
+            alertBox.classList.remove('hidden');
+        }
+        return;
+    }
+
+    const origHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding...';
+
+    try {
+        const res = await fetch('/api/admin/volunteers/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, name, password })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            document.getElementById('volNewUsername').value = '';
+            document.getElementById('volNewName').value = '';
+            document.getElementById('volNewPassword').value = '';
+            fetchVolunteersList();
+        } else {
+            if (alertBox) {
+                alertBox.textContent = data.message || 'Error adding volunteer';
+                alertBox.classList.remove('hidden');
+            }
+        }
+    } catch (err) {
+        if (alertBox) {
+            alertBox.textContent = 'Server error while adding volunteer';
+            alertBox.classList.remove('hidden');
+        }
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
+    }
+}
+
+async function deleteVolunteer(username) {
+    if (!confirm(`Are you sure you want to remove volunteer account '@${username}'?`)) return;
+
+    try {
+        const res = await fetch('/api/admin/volunteers/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, 'info');
+            fetchVolunteersList();
+        } else {
+            showToast(data.message || 'Failed to remove volunteer', 'error');
+        }
+    } catch (err) {
+        showToast('Error removing volunteer', 'error');
+    }
+}
+
+async function quickUpdateVolunteerPassword(username) {
+    const newPass = prompt(`Set new password for volunteer '@${username}' (minimum 4 characters):`);
+    if (newPass === null) return;
+    const cleanPass = newPass.trim();
+    if (!cleanPass || cleanPass.length < 4) {
+        showToast('Password must be at least 4 characters long', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/volunteers/update-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, new_password: cleanPass })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            fetchVolunteersList();
+        } else {
+            showToast(data.message || 'Failed to update password', 'error');
+        }
+    } catch (err) {
+        showToast('Error updating password', 'error');
+    }
+}
+
+async function populatePasswordTargetUsers() {
+    try {
+        const res = await fetch('/api/admin/volunteers');
+        const data = await res.json();
+        if (data.success && data.volunteers) {
+            const select = document.getElementById('pwdTargetUser');
+            if (select) {
+                const prev = select.value || 'admin';
+                select.innerHTML = data.volunteers.map(v => 
+                    `<option value="${v.username}">${v.name || v.username} (${v.username})</option>`
+                ).join('');
+                if (data.volunteers.some(v => v.username === prev)) {
+                    select.value = prev;
+                }
+            }
+        }
+    } catch (e) {}
+}
+
 // ==================== CHANGE PASSWORD MODAL ====================
 function openPasswordModal() {
     const modal = document.getElementById('passwordModal');
     if (!modal) return;
     modal.classList.remove('hidden');
-    document.getElementById('pwdTargetUser').value = 'admin';
+    populatePasswordTargetUsers();
     document.getElementById('pwdCurrentAdmin').value = '';
     document.getElementById('pwdNewPassword').value = '';
     document.getElementById('pwdConfirmPassword').value = '';

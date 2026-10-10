@@ -66,31 +66,48 @@ def login():
             db.close()
             return jsonify({'success': False, 'message': 'Invalid administrator password'}), 401
 
-    # Volunteer accounts
-    user = users_table.get((User.username == username) & (User.password == password))
-    if user:
+    # Volunteer accounts check by username or display name
+    check_name = (username or volunteer_name).strip().lower()
+    matched_user = None
+    for u in users_table.all():
+        u_user = u.get('username', '').strip().lower()
+        u_name = u.get('name', '').strip().lower()
+        if (check_name == u_user or check_name == u_name) and u.get('password') == password:
+            matched_user = u
+            break
+
+    if matched_user:
         db.close()
         return jsonify({
             'success': True,
-            'role': user.get('role', 'volunteer'),
-            'username': user.get('username'),
-            'name': user.get('name'),
-            'token': f"vol-{user.get('username')}-token"
+            'role': matched_user.get('role', 'volunteer'),
+            'username': matched_user.get('username'),
+            'name': matched_user.get('name', matched_user.get('username').title()),
+            'token': f"vol-{matched_user.get('username')}-token"
         })
 
-    # Quick volunteer sign-in with custom name & passcode 'pass' or 'gate123'
-    if volunteer_name and password in ('pass', 'gate123', 'volunteer123', '1234'):
+    # Quick volunteer sign-in with custom name & standard passcodes
+    if (volunteer_name or username) and password in ('pass', 'gate123', 'volunteer123', '1234'):
+        vol_display = volunteer_name or username
         db.close()
         return jsonify({
             'success': True,
             'role': 'volunteer',
-            'username': volunteer_name.lower().replace(' ', '_'),
-            'name': volunteer_name,
+            'username': vol_display.lower().replace(' ', '_'),
+            'name': vol_display,
             'token': f"vol-{datetime.now().timestamp()}"
         })
 
     db.close()
     return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
+
+import threading
+import time
+
+scan_lock = threading.Lock()
+volunteer_last_scans = {}
+recent_barcode_scans = {}
+COOLDOWN_SECONDS = 4.0
 
 @app.route('/api/scan', methods=['POST'])
 def scan_barcode():
@@ -101,54 +118,131 @@ def scan_barcode():
     if not raw_barcode:
         return jsonify({'success': False, 'message': 'Barcode cannot be empty'}), 400
 
-    barcode = raw_barcode.upper()
-    db = get_db()
-    students_table = db.table('students')
-    logs_table = db.table('logs')
-    Student = Query()
+    now_ts = time.time()
+    client_key = f"{request.remote_addr}_{volunteer.lower()}"
 
-    student = students_table.get(Student.barcode == barcode)
+    with scan_lock:
+        # Enforce 4-second cooldown per volunteer / gate scanner
+        last_vol_time = volunteer_last_scans.get(client_key, 0)
+        time_since_last = now_ts - last_vol_time
+        if time_since_last < COOLDOWN_SECONDS:
+            remaining = round(COOLDOWN_SECONDS - time_since_last, 1)
+            return jsonify({
+                'success': False,
+                'status': 'COOLDOWN_ACTIVE',
+                'cooldown_remaining': remaining,
+                'message': f'Please wait {remaining}s before scanning another pass. 4-second anti-duplicate delay active.'
+            }), 429
 
-    # If not found directly, try case-insensitive or stripped search
-    if not student:
-        for s in students_table.all():
-            if s.get('barcode', '').strip().upper() == barcode:
-                student = s
-                break
+        barcode = raw_barcode.upper()
+        clean_barcode = barcode.replace(' ', '')
+        db = get_db()
+        students_table = db.table('students')
+        logs_table = db.table('logs')
+        Student = Query()
 
-    now = datetime.now()
-    ts_iso = now.isoformat()
-    formatted_date = now.strftime('%d %b %Y')
-    formatted_time = now.strftime('%I:%M:%S %p')
+        # Find matching student(s)
+        matches = students_table.search(Student.barcode == barcode)
+        if not matches and clean_barcode != barcode:
+            matches = students_table.search(Student.barcode == clean_barcode)
 
-    if not student:
-        # Log invalid attempt
-        logs_table.insert({
-            'barcode': barcode,
-            'student_name': 'UNKNOWN',
-            'college': 'N/A',
-            'division': 'N/A',
-            'roll_no': 'N/A',
-            'status': 'NOT_FOUND',
-            'timestamp': ts_iso,
-            'date': formatted_date,
-            'time': formatted_time,
-            'volunteer': volunteer,
-            'message': 'Barcode not found in database'
-        })
-        db.close()
-        return jsonify({
-            'success': False,
-            'status': 'NOT_FOUND',
-            'barcode': barcode,
-            'message': f'Barcode [{barcode}] is NOT registered!'
-        })
+        if not matches:
+            for s in students_table.all():
+                s_bc = s.get('barcode', '').strip().upper()
+                if s_bc in (barcode, clean_barcode) or s_bc.replace(' ', '') == clean_barcode:
+                    matches.append(s)
 
-    # SECOND ENTRY CHECK - Strictly deny duplicate entry!
-    if student.get('status') == 'ENTERED':
-        prev_date = student.get('entry_date', '')
-        prev_time = student.get('entry_time', '')
-        prev_vol = student.get('volunteer', 'Previous Volunteer')
+        # If multiple matches (e.g. across different colleges), prioritize PENDING student
+        student = None
+        if matches:
+            pending_matches = [m for m in matches if m.get('status') != 'ENTERED']
+            if pending_matches:
+                student = pending_matches[0]
+            else:
+                student = matches[0]
+
+        now = datetime.now()
+        ts_iso = now.isoformat()
+        formatted_date = now.strftime('%d %b %Y')
+        formatted_time = now.strftime('%I:%M:%S %p')
+
+        if not student:
+            # Update scan time to prevent spamming non-existent barcodes
+            volunteer_last_scans[client_key] = now_ts
+            logs_table.insert({
+                'barcode': barcode,
+                'student_name': 'UNKNOWN',
+                'college': 'N/A',
+                'division': 'N/A',
+                'roll_no': 'N/A',
+                'status': 'NOT_FOUND',
+                'timestamp': ts_iso,
+                'date': formatted_date,
+                'time': formatted_time,
+                'volunteer': volunteer,
+                'message': 'Barcode not found in database'
+            })
+            db.close()
+            return jsonify({
+                'success': False,
+                'status': 'NOT_FOUND',
+                'barcode': barcode,
+                'cooldown_seconds': 4,
+                'message': f'Barcode [{barcode}] is NOT registered!'
+            })
+
+        # Record successful scan timestamp for cooldown
+        volunteer_last_scans[client_key] = now_ts
+        recent_barcode_scans[barcode] = now_ts
+        recent_barcode_scans[clean_barcode] = now_ts
+
+        # SECOND ENTRY CHECK - Strictly deny duplicate entry!
+        if student.get('status') == 'ENTERED':
+            prev_date = student.get('entry_date', '')
+            prev_time = student.get('entry_time', '')
+            prev_vol = student.get('volunteer', 'Previous Volunteer')
+
+            logs_table.insert({
+                'barcode': barcode,
+                'student_name': student.get('name'),
+                'college': student.get('college'),
+                'division': student.get('division'),
+                'roll_no': student.get('roll_no'),
+                'status': 'DUPLICATE_DENIED',
+                'timestamp': ts_iso,
+                'date': formatted_date,
+                'time': formatted_time,
+                'volunteer': volunteer,
+                'message': f'Second entry denied. Already checked in at {prev_time} on {prev_date} by {prev_vol}'
+            })
+            db.close()
+            return jsonify({
+                'success': False,
+                'status': 'DUPLICATE_DENIED',
+                'message': 'SECOND ENTRY DENIED! This pass has already been used.',
+                'student': student,
+                'cooldown_seconds': 4,
+                'first_entry': {
+                    'date': prev_date,
+                    'time': prev_time,
+                    'volunteer': prev_vol
+                }
+            })
+
+        # ACCESS GRANTED: First time entry
+        students_table.update({
+            'status': 'ENTERED',
+            'entry_timestamp': ts_iso,
+            'entry_date': formatted_date,
+            'entry_time': formatted_time,
+            'volunteer': volunteer
+        }, doc_ids=[student.doc_id])
+
+        student['status'] = 'ENTERED'
+        student['entry_timestamp'] = ts_iso
+        student['entry_date'] = formatted_date
+        student['entry_time'] = formatted_time
+        student['volunteer'] = volunteer
 
         logs_table.insert({
             'barcode': barcode,
@@ -156,62 +250,22 @@ def scan_barcode():
             'college': student.get('college'),
             'division': student.get('division'),
             'roll_no': student.get('roll_no'),
-            'status': 'DUPLICATE_DENIED',
+            'status': 'GRANTED',
             'timestamp': ts_iso,
             'date': formatted_date,
             'time': formatted_time,
             'volunteer': volunteer,
-            'message': f'Second entry denied. Already checked in at {prev_time} on {prev_date} by {prev_vol}'
+            'message': 'Access Granted'
         })
+
         db.close()
         return jsonify({
-            'success': False,
-            'status': 'DUPLICATE_DENIED',
-            'message': 'SECOND ENTRY DENIED! This pass has already been used.',
-            'student': student,
-            'first_entry': {
-                'date': prev_date,
-                'time': prev_time,
-                'volunteer': prev_vol
-            }
+            'success': True,
+            'status': 'GRANTED',
+            'message': 'ENTRY GRANTED! Welcome to Grand Freshers Carnival 2K26',
+            'cooldown_seconds': 4,
+            'student': student
         })
-
-    # ACCESS GRANTED: First time entry
-    students_table.update({
-        'status': 'ENTERED',
-        'entry_timestamp': ts_iso,
-        'entry_date': formatted_date,
-        'entry_time': formatted_time,
-        'volunteer': volunteer
-    }, doc_ids=[student.doc_id])
-
-    student['status'] = 'ENTERED'
-    student['entry_timestamp'] = ts_iso
-    student['entry_date'] = formatted_date
-    student['entry_time'] = formatted_time
-    student['volunteer'] = volunteer
-
-    logs_table.insert({
-        'barcode': barcode,
-        'student_name': student.get('name'),
-        'college': student.get('college'),
-        'division': student.get('division'),
-        'roll_no': student.get('roll_no'),
-        'status': 'GRANTED',
-        'timestamp': ts_iso,
-        'date': formatted_date,
-        'time': formatted_time,
-        'volunteer': volunteer,
-        'message': 'Access Granted'
-    })
-
-    db.close()
-    return jsonify({
-        'success': True,
-        'status': 'GRANTED',
-        'message': 'ENTRY GRANTED! Welcome to Grand Freshers Carnival 2K26',
-        'student': student
-    })
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
@@ -225,7 +279,7 @@ def get_stats():
     pending = total - entered
     overall_pct = round((entered / total * 100), 1) if total > 0 else 0
 
-    colleges = {'DYPIMED': {}, 'DYPCOEI': {}, 'DYPTC': {}}
+    colleges = {'DYPIMED': {}, 'DYPCOEI': {}, 'DYPTC': {}, 'DYPSOA': {}}
     for c in colleges.keys():
         c_students = [s for s in all_students if s.get('college') == c]
         c_total = len(c_students)
@@ -250,6 +304,7 @@ def get_stats():
         'colleges': colleges,
         'recent_logs': recent_logs
     })
+
 
 @app.route('/api/students', methods=['GET'])
 def get_students():
@@ -460,8 +515,8 @@ def get_admin_users():
     for u in users_table.all():
         users.append({
             'username': u.get('username'),
-            'name': u.get('name'),
-            'role': u.get('role')
+            'name': u.get('name', u.get('username', '').title()),
+            'role': u.get('role', 'volunteer')
         })
     db.close()
 
@@ -477,6 +532,124 @@ def get_admin_users():
             users.append(d)
 
     return jsonify({'success': True, 'users': users})
+
+
+@app.route('/api/admin/volunteers', methods=['GET'])
+def get_admin_volunteers():
+    db = get_db()
+    users_table = db.table('users')
+    volunteers = []
+    for u in users_table.all():
+        volunteers.append({
+            'username': u.get('username'),
+            'name': u.get('name', u.get('username', '').title()),
+            'role': u.get('role', 'volunteer')
+        })
+    db.close()
+    return jsonify({'success': True, 'volunteers': volunteers})
+
+
+@app.route('/api/admin/volunteers/add', methods=['POST'])
+def add_admin_volunteer():
+    data = request.json or {}
+    username = data.get('username', '').strip().lower()
+    name = data.get('name', '').strip()
+    password = data.get('password', '').strip()
+
+    if not username:
+        return jsonify({'success': False, 'message': 'Username is required'}), 400
+    if not password:
+        return jsonify({'success': False, 'message': 'Password is required'}), 400
+    if len(password) < 4:
+        return jsonify({'success': False, 'message': 'Password must be at least 4 characters long'}), 400
+    if not name:
+        name = username.title()
+
+    db = get_db()
+    users_table = db.table('users')
+    User = Query()
+
+    existing = users_table.get(User.username == username)
+    if existing:
+        db.close()
+        return jsonify({'success': False, 'message': f"Username '{username}' already exists. Choose another username."}), 400
+
+    users_table.insert({
+        'username': username,
+        'name': name,
+        'password': password,
+        'role': 'volunteer'
+    })
+    db.close()
+    return jsonify({
+        'success': True,
+        'message': f"Volunteer '{name}' (@{username}) added successfully!"
+    })
+
+
+@app.route('/api/admin/volunteers/delete', methods=['POST'])
+def delete_admin_volunteer():
+    data = request.json or {}
+    username = data.get('username', '').strip().lower()
+
+    if not username:
+        return jsonify({'success': False, 'message': 'Username is required'}), 400
+    if username == 'admin':
+        return jsonify({'success': False, 'message': 'Cannot delete administrator account!'}), 400
+
+    db = get_db()
+    users_table = db.table('users')
+    User = Query()
+
+    existing = users_table.get(User.username == username)
+    if not existing:
+        db.close()
+        return jsonify({'success': False, 'message': f"Volunteer '{username}' not found."}), 404
+
+    users_table.remove(User.username == username)
+    db.close()
+    return jsonify({
+        'success': True,
+        'message': f"Volunteer '{username}' has been removed successfully!"
+    })
+
+
+@app.route('/api/admin/volunteers/update-password', methods=['POST'])
+def update_admin_volunteer_password():
+    data = request.json or {}
+    username = data.get('username', '').strip().lower()
+    new_password = data.get('new_password', '').strip()
+
+    if not username:
+        return jsonify({'success': False, 'message': 'Username is required'}), 400
+    if not new_password:
+        return jsonify({'success': False, 'message': 'New password is required'}), 400
+    if len(new_password) < 4:
+        return jsonify({'success': False, 'message': 'Password must be at least 4 characters long'}), 400
+
+    db = get_db()
+    users_table = db.table('users')
+    User = Query()
+
+    existing = users_table.get(User.username == username)
+    if not existing:
+        # If default volunteer not yet explicitly in DB, add it
+        name = username.title()
+        role = 'admin' if username == 'admin' else 'volunteer'
+        users_table.insert({
+            'username': username,
+            'name': name,
+            'password': new_password,
+            'role': role
+        })
+    else:
+        users_table.update({'password': new_password}, User.username == username)
+
+    db.close()
+    return jsonify({
+        'success': True,
+        'message': f"Password for '{username}' updated successfully!"
+    })
 
 @app.route('/api/export-csv')
 def export_csv():
