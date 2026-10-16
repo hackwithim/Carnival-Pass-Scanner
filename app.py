@@ -36,7 +36,7 @@ def get_admin_password(db):
     return 'admin123'
 
 
-def resolve_student_record(students_table, raw_input):
+def resolve_student_record(students_table, raw_input, preferred_college=None):
     """
     Intelligently resolves a student or pass record matching the input.
     Supports:
@@ -44,7 +44,7 @@ def resolve_student_record(students_table, raw_input):
     2. Box Office serial syntax (e.g. 'CARNIVAL 1', '0001', '1', 'BO 42', 'CARNIVAL-100')
     3. Exact roll number match
     4. Clean symbol/whitespace-stripped match
-    Prioritizes PENDING records when duplicate numbers exist.
+    Prioritizes PENDING records when duplicate numbers exist, respecting preferred_college if provided.
     """
     raw_str = (raw_input or '').strip()
     if not raw_str:
@@ -54,14 +54,25 @@ def resolve_student_record(students_table, raw_input):
     clean_upper = re.sub(r'[\s\-_#]+', '', raw_upper)
     all_records = students_table.all()
 
+    def rank_matches(matches):
+        if preferred_college:
+            pref_up = preferred_college.strip().upper()
+            return sorted(matches, key=lambda s: (
+                0 if s.get('status') != 'ENTERED' and (s.get('college') or '').upper() == pref_up else
+                1 if s.get('status') != 'ENTERED' else
+                2 if (s.get('college') or '').upper() == pref_up else 3
+            ))
+        pending = [m for m in matches if m.get('status') != 'ENTERED']
+        return pending if pending else matches
+
     # 1. Exact match on barcode
     direct_matches = [
         s for s in all_records
         if (s.get('barcode') or '').strip().upper() in (raw_upper, clean_upper)
     ]
     if direct_matches:
-        pending = [m for m in direct_matches if m.get('status') != 'ENTERED']
-        return (pending[0] if pending else direct_matches[0]), direct_matches[0].get('barcode', raw_upper)
+        ranked = rank_matches(direct_matches)
+        return ranked[0], ranked[0].get('barcode', raw_upper)
 
     # 2. Box Office syntax expansion
     bo_candidates = []
@@ -85,8 +96,8 @@ def resolve_student_record(students_table, raw_input):
             if (s.get('barcode') or '').strip().upper() == cand
         ]
         if bo_matches:
-            pending = [m for m in bo_matches if m.get('status') != 'ENTERED']
-            return (pending[0] if pending else bo_matches[0]), cand
+            ranked = rank_matches(bo_matches)
+            return ranked[0], cand
 
     # 3. Roll number match
     roll_matches = [
@@ -94,8 +105,8 @@ def resolve_student_record(students_table, raw_input):
         if (s.get('roll_no') or '').strip().upper() in (raw_upper, clean_upper)
     ]
     if roll_matches:
-        pending = [m for m in roll_matches if m.get('status') != 'ENTERED']
-        return (pending[0] if pending else roll_matches[0]), roll_matches[0].get('barcode', raw_upper)
+        ranked = rank_matches(roll_matches)
+        return ranked[0], ranked[0].get('barcode', raw_upper)
 
     # 4. Clean barcode stripped fallback
     stripped_matches = [
@@ -103,10 +114,11 @@ def resolve_student_record(students_table, raw_input):
         if re.sub(r'[\s\-_#]+', '', (s.get('barcode') or '').upper()) == clean_upper
     ]
     if stripped_matches:
-        pending = [m for m in stripped_matches if m.get('status') != 'ENTERED']
-        return (pending[0] if pending else stripped_matches[0]), stripped_matches[0].get('barcode', raw_upper)
+        ranked = rank_matches(stripped_matches)
+        return ranked[0], ranked[0].get('barcode', raw_upper)
 
     return None, raw_upper
+
 
 
 @app.route('/')
@@ -200,7 +212,11 @@ def scan_barcode():
         students_table = db.table('students')
         logs_table = db.table('logs')
 
-        student, matched_barcode = resolve_student_record(students_table, raw_barcode)
+        preferred_college = data.get('college')
+        if not preferred_college and 'box' in volunteer.lower():
+            preferred_college = 'BOX OFFICE'
+
+        student, matched_barcode = resolve_student_record(students_table, raw_barcode, preferred_college)
         barcode = matched_barcode or raw_barcode.upper()
         clean_barcode = barcode.replace(' ', '')
 
