@@ -1,5 +1,6 @@
 import sys
 import os
+import urllib.parse
 
 # Add root project directory to sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12,25 +13,21 @@ from app import app
 class VercelPathFixMiddleware:
     """
     Vercel rewrites backend requests using the destination path (/api/index.py).
-    This middleware restores the original request path from Vercel proxy headers
-    (HTTP_X_NOW_PATHNAME, HTTP_X_FORWARDED_URI, HTTP_X_ORIGINAL_URI, HTTP_X_MATCHED_PATH, REQUEST_URI)
+    Extracts the original request path from query param __path__ or Vercel proxy headers
     so Flask routes all endpoints (/, /api/login, /api/scan, /static/...) accurately.
     """
     def __init__(self, wsgi_app):
         self.wsgi_app = wsgi_app
 
     def __call__(self, environ, start_response):
-        original_path = (
-            environ.get('HTTP_X_NOW_PATHNAME') or
-            environ.get('HTTP_X_FORWARDED_URI') or
-            environ.get('HTTP_X_ORIGINAL_URI') or
-            environ.get('HTTP_X_MATCHED_PATH') or
-            environ.get('REQUEST_URI') or
-            environ.get('RAW_URI')
-        )
-        if original_path:
-            path_only = original_path.split('?')[0]
-            environ['PATH_INFO'] = path_only
+        qs = environ.get('QUERY_STRING', '')
+        if '__path__' in qs:
+            parsed = urllib.parse.parse_qs(qs, keep_blank_values=True)
+            if '__path__' in parsed:
+                raw_path = parsed.pop('__path__')[0]
+                new_qs = urllib.parse.urlencode([(k, v) for k, vals in parsed.items() for v in vals])
+                environ['PATH_INFO'] = raw_path if raw_path.startswith('/') else '/' + raw_path
+                environ['QUERY_STRING'] = new_qs
         elif environ.get('PATH_INFO') in ('/api/index.py', '/api', '/api/'):
             environ['PATH_INFO'] = '/'
         return self.wsgi_app(environ, start_response)
