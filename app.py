@@ -122,6 +122,9 @@ def resolve_student_record(students_table, raw_input, preferred_college=None):
 
 
 @app.route('/')
+@app.route('/api')
+@app.route('/api/')
+@app.route('/api/index.py')
 def index():
     return render_template('index.html')
 
